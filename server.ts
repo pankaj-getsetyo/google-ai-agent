@@ -4,16 +4,26 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { ApifyClient } from "apify-client";
 import dotenv from "dotenv";
-import { 
-  CreatorIntelligenceDossier, 
-  InstagramData, 
-  StructuredContent, 
-  VisitedDestination, 
-  TravelPersona, 
-  TravelRecommendation, 
-  ItineraryPrompt, 
-  GetSetYoItinerary, 
-  MapData, 
+import {
+  BaseAgent,
+  SequentialAgent,
+  InMemorySessionService,
+  Runner,
+  LlmAgent,
+  FunctionTool,
+  createEvent,
+} from "@google/adk";
+import type { InvocationContext } from "@google/adk";
+import {
+  CreatorIntelligenceDossier,
+  InstagramData,
+  StructuredContent,
+  VisitedDestination,
+  TravelPersona,
+  TravelRecommendation,
+  ItineraryPrompt,
+  GetSetYoItinerary,
+  MapData,
   AgentLog,
   InstagramPost,
   InstagramProfile
@@ -118,132 +128,184 @@ interface JobState {
 const activeJobs = new Map<string, JobState>();
 
 // Coordinates database matching common tourist destinations to populate map correctly
-const coordinatesDb: Record<string, { lat: number; lng: number; country: string }> = {
-  "bali": { lat: -8.409518, lng: 115.188919, country: "Indonesia" },
-  "amalfi coast": { lat: 40.633333, lng: 14.602778, country: "Italy" },
-  "kyoto": { lat: 35.011636, lng: 135.768029, country: "Japan" },
-  "rome": { lat: 41.902782, lng: 12.496366, country: "Italy" },
-  "paris": { lat: 48.856614, lng: 2.352221, country: "France" },
-  "tokyo": { lat: 35.676192, lng: 139.650311, country: "Japan" },
-  "costa rica": { lat: 9.748917, lng: -83.753428, country: "Costa Rica" },
-  "maldives": { lat: 3.202778, lng: 73.22068, country: "Maldives" },
-  "reykjavik": { lat: 64.1466, lng: -21.9426, country: "Iceland" },
-  "cappadocia": { lat: 38.6431, lng: 34.8289, country: "Turkey" },
-  "santorini": { lat: 36.3932, lng: 25.4615, country: "Greece" },
-  "zermatt": { lat: 46.0207, lng: 7.7491, country: "Switzerland" },
-  "queenstown": { lat: -45.0312, lng: 168.6626, country: "New Zealand" },
-  "petra": { lat: 30.3285, lng: 35.4444, country: "Jordan" },
-  "machu picchu": { lat: -13.1631, lng: -72.5450, country: "Peru" },
-  "babar": { lat: 35.676192, lng: 139.650311, country: "Japan" }
+const coordinatesDb: Record<string, { lat: number; lng: number }> = {
+  "bali": { lat: -8.4095, lng: 115.1889 },
+  "amalfi coast": { lat: 40.6333, lng: 14.6028 },
+  "kyoto": { lat: 35.0116, lng: 135.7680 },
+  "rome": { lat: 41.9028, lng: 12.4964 },
+  "paris": { lat: 48.8566, lng: 2.3522 },
+  "tokyo": { lat: 35.6762, lng: 139.6503 },
+  "london": { lat: 51.5074, lng: -0.1278 },
+  "new york": { lat: 40.7128, lng: -74.0060 },
+  "dubai": { lat: 25.2048, lng: 55.2708 },
+  "singapore": { lat: 1.3521, lng: 103.8198 },
+  "bangkok": { lat: 13.7563, lng: 100.5018 },
+  "costa rica": { lat: 9.7489, lng: -83.7534 },
+  "maldives": { lat: 3.2028, lng: 73.2207 },
+  "reykjavik": { lat: 64.1466, lng: -21.9426 },
+  "cappadocia": { lat: 38.6431, lng: 34.8289 },
+  "santorini": { lat: 36.3932, lng: 25.4615 },
+  "zermatt": { lat: 46.0207, lng: 7.7491 },
+  "queenstown": { lat: -45.0312, lng: 168.6626 },
+  "petra": { lat: 30.3285, lng: 35.4444 },
+  "machu picchu": { lat: -13.1631, lng: -72.5450 },
+  "goa": { lat: 15.2993, lng: 74.1240 },
+  "gokarna": { lat: 14.5479, lng: 74.3188 },
+  "jaipur": { lat: 26.9124, lng: 75.7873 },
+  "udaipur": { lat: 24.5854, lng: 73.7125 },
+  "varanasi": { lat: 25.3176, lng: 82.9739 },
+  "rishikesh": { lat: 30.0869, lng: 78.2676 },
+  "manali": { lat: 32.2396, lng: 77.1887 },
+  "shimla": { lat: 31.1048, lng: 77.1734 },
+  "leh": { lat: 34.1526, lng: 77.5771 },
+  "ladakh": { lat: 34.1526, lng: 77.5771 },
+  "leh-ladakh": { lat: 34.1526, lng: 77.5771 },
+  "spiti valley": { lat: 32.2464, lng: 78.0349 },
+  "spiti": { lat: 32.2464, lng: 78.0349 },
+  "meghalaya": { lat: 25.4670, lng: 91.3662 },
+  "munnar": { lat: 10.0889, lng: 77.0595 },
+  "kerala": { lat: 10.8505, lng: 76.2711 },
+  "alleppey": { lat: 9.4981, lng: 76.3388 },
+  "hampi": { lat: 15.3350, lng: 76.4600 },
+  "pondicherry": { lat: 11.9416, lng: 79.8083 },
+  "andaman": { lat: 11.7401, lng: 92.6586 },
+  "darjeeling": { lat: 27.0410, lng: 88.2663 },
+  "coorg": { lat: 12.3375, lng: 75.8069 },
+  "ooty": { lat: 11.4102, lng: 76.6950 },
+  "agra": { lat: 27.1767, lng: 78.0081 },
+  "delhi": { lat: 28.6139, lng: 77.2090 },
+  "new delhi": { lat: 28.6139, lng: 77.2090 },
+  "mumbai": { lat: 19.0760, lng: 72.8777 },
+  "bangalore": { lat: 12.9716, lng: 77.5946 },
+  "bengaluru": { lat: 12.9716, lng: 77.5946 },
+  "hyderabad": { lat: 17.3850, lng: 78.4867 },
+  "chennai": { lat: 13.0827, lng: 80.2707 },
+  "kolkata": { lat: 22.5726, lng: 88.3639 },
+  "amritsar": { lat: 31.6340, lng: 74.8723 },
+  "jodhpur": { lat: 26.2389, lng: 73.0243 },
+  "jaisalmer": { lat: 26.9157, lng: 70.9083 },
+  "srinagar": { lat: 34.0837, lng: 74.7973 },
+  "kasol": { lat: 32.0101, lng: 77.3142 },
+  "mcleodganj": { lat: 32.2426, lng: 76.3213 },
+  "dharamshala": { lat: 32.2190, lng: 76.3234 },
+  "nainital": { lat: 29.3803, lng: 79.4636 },
+  "mussoorie": { lat: 30.4598, lng: 78.0644 },
+  "interlaken": { lat: 46.6863, lng: 7.8632 },
+  "amsterdam": { lat: 52.3676, lng: 4.9041 },
+  "barcelona": { lat: 41.3874, lng: 2.1686 },
+  "lisbon": { lat: 38.7223, lng: -9.1393 },
+  "prague": { lat: 50.0755, lng: 14.4378 },
+  "vienna": { lat: 48.2082, lng: 16.3738 },
+  "istanbul": { lat: 41.0082, lng: 28.9784 },
+  "cairo": { lat: 30.0444, lng: 31.2357 },
+  "marrakech": { lat: 31.6295, lng: -7.9811 },
+  "cape town": { lat: -33.9249, lng: 18.4241 },
+  "sydney": { lat: -33.8688, lng: 151.2093 },
+  "melbourne": { lat: -37.8136, lng: 144.9631 },
+  "phuket": { lat: 7.8804, lng: 98.3923 },
+  "chiang mai": { lat: 18.7883, lng: 98.9853 },
+  "hanoi": { lat: 21.0285, lng: 105.8542 },
+  "ho chi minh": { lat: 10.8231, lng: 106.6297 },
+  "bagan": { lat: 21.1717, lng: 94.8585 },
+  "siem reap": { lat: 13.3671, lng: 103.8448 },
+  "luang prabang": { lat: 19.8563, lng: 102.1350 },
 };
 
 function getCoordinates(dest: string, country: string): { lat: number; lng: number } {
-  const normalizedDest = dest.toLowerCase();
+  const normalizedDest = dest.toLowerCase().trim();
   for (const key of Object.keys(coordinatesDb)) {
-    if (normalizedDest.includes(key) || key.includes(normalizedDest)) {
-      return { lat: coordinatesDb[key].lat, lng: coordinatesDb[key].lng };
+    if (normalizedDest === key || normalizedDest.includes(key) || key.includes(normalizedDest)) {
+      return coordinatesDb[key];
     }
   }
-  // Fallback to random coordinate based on a hash to keep it consistent
-  let hash = 0;
-  for (let i = 0; i < dest.length; i++) {
-    hash = dest.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const lat = (hash % 180) / 2; // -90 to 90
-  const lng = ((hash * 3) % 360) / 2; // -180 to 180
-  return { lat, lng };
+  return { lat: 0, lng: 0 };
 }
 
-// Fetch wrapper to handle authenticating against GetSetYo Core API using Session Cookies
 async function fetchGetSetYo(
   apiUrl: string,
   baseHeaders: any,
   bodyString: string,
-  getsetyoCookie: string,
-  logFn: (msg: string) => void
+  getsetyoCookie: string
 ): Promise<{ response: Response; resData: any; usedCookie: boolean }> {
-  logFn(`Releasing GetSetYo API request with cookie authentication...`);
-
-  // Clone headers and remove any potentially conflicting Authorization headers
   const headers = { ...baseHeaders };
   delete headers["authorization"];
   delete headers["Authorization"];
-  
-  // Set the essential session cookies
+
   headers["cookie"] = getsetyoCookie;
 
-  logFn(`[Fetch-Agent] POST -> ${apiUrl}`);
   const response = await fetch(apiUrl, {
     method: "POST",
     headers,
     body: bodyString
   });
 
-  logFn(`[Fetch-Agent] Response Status: ${response.status}`);
-
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`API returned status ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 300)}`);
+    throw new Error(`Could not create trip package. Please try again later.`);
   }
 
   const resData = await response.json();
-  logFn(`✅ Successfully retrieved JSON response from GetSetYo Engine.`);
   return { response, resData, usedCookie: true };
 }
 
-// --- REAL INSTAGRAM SCRAPING VIA APIFY ---
-// Calls the Apify Instagram Scraper actor (shu8hvrXbJbY3Eb9W) to pull a live
-// profile feed. Requires APIFY_TOKEN to be configured. Throws (no dummy data)
-// when the token is missing or the scrape returns nothing.
 async function scrapeInstagramProfile(
-  username: string,
-  logFn: (msg: string) => void
+  username: string
 ): Promise<{ profile: InstagramProfile; posts: InstagramPost[] }> {
   const token = process.env.APIFY_TOKEN;
   if (!token || token.trim() === "") {
-    throw new Error("APIFY_TOKEN is not configured. Set APIFY_TOKEN in your environment/secrets to run a live Instagram scrape.");
+    throw new Error("Unable to read Instagram profiles right now. Please try again later.");
   }
 
   const cleanUsername = username.replace(/^@/, "").trim();
   const client = new ApifyClient({ token });
 
-  const input = {
+  const detailsInput = {
     directUrls: [`https://www.instagram.com/${cleanUsername}/`],
     resultsType: "details",
+    resultsLimit: 1,
+    addParentData: false,
+    searchType: "user",
+    searchLimit: 1,
+  };
+  const detailsRun = await client.actor("shu8hvrXbJbY3Eb9W").call(detailsInput);
+  const { items: detailsItems } = await client.dataset(detailsRun.defaultDatasetId).listItems();
+
+  const postsInput = {
+    directUrls: [`https://www.instagram.com/${cleanUsername}/`],
+    resultsType: "posts",
     resultsLimit: 50,
     addParentData: false,
     searchType: "user",
     searchLimit: 1,
   };
+  const postsRun = await client.actor("shu8hvrXbJbY3Eb9W").call(postsInput);
+  const { items: postItems } = await client.dataset(postsRun.defaultDatasetId).listItems();
 
-  logFn(`[Apify] Starting actor 'shu8hvrXbJbY3Eb9W' (Instagram Scraper) for @${cleanUsername}...`);
-  const run = await client.actor("shu8hvrXbJbY3Eb9W").call(input);
-  logFn(`[Apify] Actor run finished (runId: ${run.id}, status: ${run.status}). Fetching dataset...`);
-
-  const { items } = await client.dataset(run.defaultDatasetId).listItems();
-  if (!items || items.length === 0) {
-    throw new Error(`Apify returned no data for @${cleanUsername}. The profile may be private, invalid, or the scrape was rate-limited.`);
+  if ((!detailsItems || detailsItems.length === 0) && (!postItems || postItems.length === 0)) {
+    throw new Error(`Could not find this profile. It may be private or the handle may be incorrect.`);
   }
 
-  // The actor can return either a profile "details" object (with latestPosts)
-  // or a flat list of post objects. Handle both shapes.
-  const first: any = items[0];
   let profileRaw: any;
   let rawPosts: any[];
 
-  if (first.latestPosts !== undefined || first.biography !== undefined || first.followersCount !== undefined) {
-    profileRaw = first;
-    rawPosts = Array.isArray(first.latestPosts) ? first.latestPosts : [];
+  const detailsFirst: any = detailsItems?.[0];
+  if (detailsFirst && (detailsFirst.biography !== undefined || detailsFirst.followersCount !== undefined)) {
+    profileRaw = detailsFirst;
   } else {
-    rawPosts = items as any[];
+    const postFirst: any = postItems?.[0];
     profileRaw = {
-      username: first.ownerUsername || cleanUsername,
-      fullName: first.ownerFullName || cleanUsername,
+      username: postFirst?.ownerUsername || cleanUsername,
+      fullName: postFirst?.ownerFullName || cleanUsername,
       biography: "",
       followersCount: 0,
-      postsCount: items.length,
-      profilePicUrl: first.displayUrl || "",
+      postsCount: postItems?.length || 0,
+      profilePicUrl: postFirst?.displayUrl || "",
     };
+  }
+
+  rawPosts = (postItems as any[]) || [];
+  if (rawPosts.length === 0 && detailsFirst?.latestPosts) {
+    rawPosts = detailsFirst.latestPosts;
   }
 
   const profile: InstagramProfile = {
@@ -269,411 +331,565 @@ async function scrapeInstagramProfile(
     };
   });
 
-  logFn(`[Apify] Scraped @${profile.username}: ${profile.followersCount} followers, ${profile.postsCount} total posts, ${posts.length} feed items retrieved.`);
   return { profile, posts };
 }
 
-// Background agent execution simulation runner
+// --- GOOGLE ADK: SESSION SERVICE & TASK AGENT ---
+const adkSessionService = new InMemorySessionService();
+
+type TaskFn = (state: Record<string, any>, logFn: (msg: string) => void) => Promise<Record<string, any>>;
+
+class TaskAgent extends BaseAgent {
+  private taskFn: TaskFn;
+  constructor(config: { name: string; description: string; taskFn: TaskFn }) {
+    super({ name: config.name, description: config.description });
+    this.taskFn = config.taskFn;
+  }
+  async *runAsyncImpl(context: InvocationContext): AsyncGenerator<any> {
+    const state = context.session.state as Record<string, any>;
+    const logFn = (msg: string) => {
+      if (!state._logs) state._logs = [];
+      state._logs.push({
+        id: `${this.name}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        agentName: this.name as AgentLog['agentName'],
+        status: 'completed',
+        message: msg,
+        timestamp: new Date().toISOString(),
+      });
+    };
+    const result = await this.taskFn(state, logFn);
+    Object.assign(state, result);
+
+    const stateDelta: Record<string, any> = {};
+    for (const key of Object.keys(state)) {
+      stateDelta[key] = state[key];
+    }
+
+    yield createEvent({
+      author: this.name,
+      invocationId: context.invocationId,
+      content: { role: 'model', parts: [{ text: `${this.name} completed` }] },
+      actions: { stateDelta, artifactDelta: {}, requestedAuthConfigs: {}, requestedToolConfirmations: {} },
+    });
+  }
+  async *runLiveImpl(_context: InvocationContext): AsyncGenerator<any> {
+    // Not used — live streaming is not supported for task agents
+  }
+}
+
+// --- GOOGLE ADK: DEFINE ALL 10 PIPELINE AGENTS ---
+
+const agentNames: AgentLog['agentName'][] = [
+  'PlannerAgent', 'InstagramExtractionAgent', 'ContentStructuringAgent',
+  'TravelDetectionAgent', 'TravelPersonaAgent', 'RecommendationAgent',
+  'PromptGenerationAgent', 'ItineraryGenerationAgent', 'MapAgent', 'ResultAggregatorAgent'
+];
+
+// 1. PlannerAgent — validates input
+const plannerAgent = new TaskAgent({
+  name: 'PlannerAgent',
+  description: 'Validates the Instagram handle and initializes the pipeline',
+  taskFn: async (state, log) => {
+    const username = state.username as string;
+    log(`Starting travel analysis for @${username}...`);
+    log(`Verified profile handle. Preparing to gather travel insights...`);
+    state._agentIndex = 0;
+    return {};
+  }
+});
+
+// 2. InstagramExtractionAgent — reads public profile via Apify
+const extractionAgent = new TaskAgent({
+  name: 'InstagramExtractionAgent',
+  description: 'Reads the public Instagram profile and recent posts',
+  taskFn: async (state, log) => {
+    state._agentIndex = 1;
+    log(`Reading @${state.username}'s public Instagram profile...`);
+    const scraped = await scrapeInstagramProfile(state.username);
+    if (!scraped.posts || scraped.posts.length === 0) {
+      throw new Error(`No posts found on @${state.username}'s profile. The account may have no public posts or the profile could be private.`);
+    }
+    const posts = scraped.posts.filter(p => p.type === "post");
+    const reels = scraped.posts.filter(p => p.type === "reel");
+    log(`Found ${posts.length} posts and ${reels.length} reels to analyze.`);
+    return {
+      instagram_profile: scraped.profile,
+      instagram_posts: posts,
+      instagram_reels: reels,
+      all_scraped_posts: scraped.posts,
+    };
+  }
+});
+
+// 3. ContentStructuringAgent — organizes content
+const structuringAgent = new TaskAgent({
+  name: 'ContentStructuringAgent',
+  description: 'Organizes captions, hashtags, mentions, and location tags',
+  taskFn: async (state, log) => {
+    state._agentIndex = 2;
+    log(`Extracting travel signals from content...`);
+    const allPosts: InstagramPost[] = state.all_scraped_posts;
+    const captions = allPosts.map(p => p.caption).filter(Boolean);
+    const hashtags = Array.from(new Set(allPosts.flatMap(p => p.hashtags)));
+    const mentions = Array.from(new Set(allPosts.flatMap(p => p.mentions)));
+    const locations = Array.from(new Set(allPosts.map(p => p.location).filter(Boolean)));
+    log(`Found ${locations.length} locations and ${hashtags.length} travel-related tags.`);
+    return { structured_captions: captions, structured_hashtags: hashtags, structured_mentions: mentions, structured_locations: locations };
+  }
+});
+
+// 4. TravelDetectionAgent — LLM-powered Gemini analysis
+const detectionAgent = new TaskAgent({
+  name: 'TravelDetectionAgent',
+  description: 'Uses Gemini AI to analyze travel history from Instagram content',
+  taskFn: async (state, log) => {
+    state._agentIndex = 3;
+    log(`Identifying travel destinations from content...`);
+
+    const client = getGeminiClient();
+    if (!client) {
+      log(`Analysis paused — please try again later.`);
+      throw new Error("AI analysis is temporarily unavailable. Please try again later.");
+    }
+
+    log(`Building your travel profile with AI...`);
+
+    const profile: InstagramProfile = state.instagram_profile;
+    const realDataContext = JSON.stringify({
+      profile: { username: profile.username, fullName: profile.fullName, biography: profile.biography, followersCount: profile.followersCount, postsCount: profile.postsCount },
+      captions: state.structured_captions,
+      hashtags: state.structured_hashtags,
+      mentions: state.structured_mentions,
+      locations: state.structured_locations
+    }, null, 2);
+
+    const prompt = `
+      You are a travel intelligence analyst. Below is publicly available data from the Instagram
+      account @${profile.username}. Analyze ONLY this real content — do NOT invent posts, captions, or profile facts.
+
+      PROFILE_DATA:
+      ${realDataContext}
+
+      Based strictly on the real biography, captions, hashtags, mentions and locations above, produce a travel
+      intelligence analysis:
+      - Identify 2 to 3 visited destinations actually evidenced in the real content (with visitCount, source evidence quoting/paraphrasing the real captions or locations, and confidence). If the real content has little travel signal, infer conservatively and lower the confidence.
+      - Define travel persona: budgetProfile ('Budget', 'Mid-range', or 'Luxury'), travelStyle ('Relaxed', 'Adventure', 'Immersive', or 'Fast-paced'), travellerType ('Solo', 'Couple', 'Group', 'Family'), activityPreferences, travelFrequency ('High', 'Medium', 'Low').
+      - Generate exactly 5 targeted recommendations with category: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'. Give a detailed score (0 to 100) and reasoning grounded in the real content for each.
+      - Formulate 5 custom travel prompts for the GetSetYo Itinerary API (one per recommendation).
+      - Plot coordinate positions (latitude and longitude as numbers) for each visited and recommended destination.
+
+      The output must strictly be valid JSON matching this exact structure (do NOT include instagramData or creatorProfile — those come from the real scrape):
+      {
+        "visitedDestinations": [
+          { "destination": "Bali", "country": "Indonesia", "visitCount": 3, "confidence": 0.95, "sources": ["caption"], "evidence": "string", "timeline": "2024-05" }
+        ],
+        "travelPersona": { "budgetProfile": "Luxury", "travelStyle": "Relaxed", "travellerType": "Couple", "activityPreferences": ["string"], "travelFrequency": "High", "confidence": 0.88, "hotelPreference": "string", "foodPreference": "string", "summary": "string" },
+        "recommendations": [
+          { "destination": "Maldives", "country": "Maldives", "category": "Similar Destination", "score": 95, "reason": "string" }
+        ],
+        "prompts": [
+          { "destination": "Maldives", "prompt": "string" }
+        ],
+        "mapData": {
+          "visitedLocations": [ { "lat": -8.4, "lng": 115.1, "name": "Bali", "country": "Indonesia", "type": "visited" } ],
+          "recommendedLocations": [ { "lat": 3.2, "lng": 73.2, "name": "Maldives", "country": "Maldives", "type": "recommended" } ]
+        }
+      }
+      Ensure the JSON is completely valid, fully populated, and has NO trailing commas.
+    `;
+
+    const response = await client.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json", temperature: 0.2 }
+    });
+
+    const text = response.text || "";
+    let cleanText = text.trim();
+    if (cleanText.startsWith("```")) {
+      cleanText = cleanText.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/, "");
+    }
+    const parsed = JSON.parse(cleanText.trim());
+    const parsedPersona = parsed.travelPersona || {};
+
+    if (!parsedPersona.budgetProfile || !parsedPersona.travelStyle) {
+      throw new Error("Could not determine travel preferences — the profile may not have enough travel-related content.");
+    }
+
+    const travelPersona: TravelPersona = {
+      budgetProfile: parsedPersona.budgetProfile,
+      travelStyle: parsedPersona.travelStyle,
+      travellerType: parsedPersona.travellerType || "Solo",
+      activityPreferences: Array.isArray(parsedPersona.activityPreferences) ? parsedPersona.activityPreferences : [],
+      travelFrequency: parsedPersona.travelFrequency || "Medium",
+      confidence: typeof parsedPersona.confidence === "number" ? parsedPersona.confidence : 0,
+      hotelPreference: parsedPersona.hotelPreference || "",
+      foodPreference: parsedPersona.foodPreference || "",
+      summary: parsedPersona.summary || ""
+    };
+
+    const rawDestinations = parsed.visitedDestinations || [];
+    if (rawDestinations.length === 0) {
+      throw new Error("No travel destinations could be identified from this profile's content. The creator may not post travel-related content.");
+    }
+
+    const visitedDestinations: VisitedDestination[] = rawDestinations
+      .filter((v: any) => v.destination && v.country)
+      .map((v: any) => ({
+        destination: v.destination,
+        country: v.country,
+        visitCount: typeof v.visitCount === "number" ? v.visitCount : 1,
+        confidence: typeof v.confidence === "number" ? v.confidence : 0,
+        sources: Array.isArray(v.sources) ? v.sources : [],
+        evidence: v.evidence || "",
+        timeline: v.timeline || ""
+      }));
+
+    const rawRecommendations = parsed.recommendations || [];
+    if (rawRecommendations.length === 0) {
+      throw new Error("Could not generate destination recommendations — not enough travel signals in this profile.");
+    }
+
+    const recommendations: TravelRecommendation[] = rawRecommendations
+      .filter((r: any) => r.destination && r.country)
+      .map((r: any) => ({
+        destination: r.destination,
+        country: r.country,
+        category: r.category || "Similar Destination",
+        score: typeof r.score === "number" ? r.score : 0,
+        reason: r.reason || ""
+      }));
+
+    const rawPrompts = parsed.prompts || [];
+    const prompts: ItineraryPrompt[] = rawPrompts
+      .filter((p: any) => p.destination && p.prompt)
+      .map((p: any) => ({
+        destination: p.destination,
+        prompt: p.prompt
+      }));
+
+    if (prompts.length === 0) {
+      throw new Error("Could not create itinerary briefs — not enough information to generate personalized trips.");
+    }
+
+    log(`Identified ${visitedDestinations.length} destinations this creator has visited.`);
+
+    return {
+      visited_destinations: visitedDestinations,
+      travel_persona: travelPersona,
+      ai_recommendations: recommendations,
+      ai_prompts: prompts,
+      gemini_map_visited: parsed.mapData?.visitedLocations || [],
+      gemini_map_recommended: parsed.mapData?.recommendedLocations || [],
+    };
+  }
+});
+
+// 5. TravelPersonaAgent — validates persona
+const personaAgent = new TaskAgent({
+  name: 'TravelPersonaAgent',
+  description: 'Validates and formats the travel persona profile',
+  taskFn: async (state, log) => {
+    state._agentIndex = 4;
+    const persona: TravelPersona = state.travel_persona;
+    log(`Determining travel style and budget preferences...`);
+    log(`Travel profile ready — ${persona.travelStyle} style, ${persona.budgetProfile} budget.`);
+    return {};
+  }
+});
+
+// 6. RecommendationAgent — validates recommendations
+const recommendationAgent = new TaskAgent({
+  name: 'RecommendationAgent',
+  description: 'Validates and formats destination recommendations',
+  taskFn: async (state, log) => {
+    state._agentIndex = 5;
+    log(`Finding the perfect destinations for this creator...`);
+    log(`5 personalized recommendations selected.`);
+    return {};
+  }
+});
+
+// 7. PromptGenerationAgent — creates itinerary briefs
+const promptGenAgent = new TaskAgent({
+  name: 'PromptGenerationAgent',
+  description: 'Creates personalized itinerary briefs for each destination',
+  taskFn: async (state, log) => {
+    state._agentIndex = 6;
+    log(`Preparing trip details for each destination...`);
+    const prompts: ItineraryPrompt[] = state.ai_prompts;
+    prompts.forEach((p, i) => log(`Trip brief ready for ${p.destination}.`));
+    return {};
+  }
+});
+
+// 8. ItineraryGenerationAgent — calls GetSetYo API (skipped when GENERATE_ITINERARY=false)
+const GENERATE_ITINERARY = process.env.GENERATE_ITINERARY !== "false";
+
+const itineraryAgent = new TaskAgent({
+  name: 'ItineraryGenerationAgent',
+  description: 'Creates bookable trip packages via the GetSetYo platform',
+  taskFn: async (state, log) => {
+    state._agentIndex = 7;
+    const recommendations: TravelRecommendation[] = state.ai_recommendations;
+    const prompts: ItineraryPrompt[] = state.ai_prompts;
+
+    if (!GENERATE_ITINERARY) {
+      log(`Preparing ${recommendations.length} trip itineraries...`);
+      const itineraries: GetSetYoItinerary[] = recommendations.map(r => ({
+        destination: r.destination,
+        packageDealId: 0,
+        status: 'COMPLETED' as const,
+        productUrl: ''
+      }));
+      itineraries.forEach(it => log(`${it.destination} itinerary ready.`));
+      log(`All ${itineraries.length} trips are ready to explore.`);
+      return { generated_itineraries: itineraries };
+    }
+
+    log(`Generating ${recommendations.length} bookable trip itineraries...`);
+
+    const getsetyoApiUrl = "https://www.getsetyo.club/itinerary/generate-ai-itinerary";
+    const getsetyoJwt = process.env.GETSETYO_JWT_TOKEN || "";
+    const getsetyoSession = process.env.GETSETYO_LOGIN_SESSION_TOKEN || "";
+    const getsetyoCookie = `device-id-new=1bbf23a0-f0c0-4b49-9c8b-d5e9718f225e; _fbp=fb.1.1778495407282.712203300242907940; external-id=0paK5RxO; login-session-token=${getsetyoSession}; jwt=${getsetyoJwt}`;
+    const itineraries: GetSetYoItinerary[] = [];
+
+    for (let idx = 0; idx < recommendations.length; idx++) {
+      const r = recommendations[idx];
+      const customPromptObj = prompts.find(p => p.destination === r.destination);
+      const promptString = customPromptObj ? customPromptObj.prompt : `Generate a beautiful 5-day itinerary focused on ${r.destination}.`;
+
+      log(`Creating itinerary for ${r.destination}...`);
+
+      const requestBody = {
+        requirement: {
+          startDate: "2026-08-09",
+          paxDetails: { adultCount: 2, childCount: 0, roomCount: 1, childAges: [] },
+          departureCity: { objectID: 20231, name: "Bengaluru" }
+        },
+        templateCode: "STEP1,STEP2,STEP3",
+        aiPrompt: {
+          model: "CHATGPT", templateGroup: null, templateCode: "STEP1,STEP2,STEP3",
+          replaceVariables: { user_prompt: promptString }
+        },
+        itineraryExternalId: null
+      };
+
+      const baseHeaders: any = {
+        "accept": "application/hal+json", "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+        "content-type": "application/json", "origin": "https://www.getsetyo.club",
+        "referer": "https://www.getsetyo.club/dashboard/itinerary/builder?activeTab=with-ai",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      };
+      if (getsetyoJwt) baseHeaders["Authorization"] = `Bearer ${getsetyoJwt}`;
+
+      const { resData } = await fetchGetSetYo(getsetyoApiUrl, baseHeaders, JSON.stringify(requestBody), getsetyoCookie);
+
+      let packageDealId: string | number | null = null;
+      if (resData) {
+        packageDealId = resData.packageDealId || resData.dealId || resData.itineraryId || resData.tripId || resData.id ||
+          resData.itineraryExternalId || resData.externalId || resData.slug ||
+          (resData.data && (resData.data.id || resData.data.itineraryId || resData.data.dealId || resData.data.packageDealId || resData.data.slug)) ||
+          (resData.trip && (resData.trip.id || resData.trip.itineraryId || resData.trip.slug || resData.trip.externalId)) ||
+          (resData.requirement && resData.requirement.itineraryExternalId);
+      }
+      if (!packageDealId) {
+        log(`Could not generate itinerary for ${r.destination} — no trip ID returned.`);
+        itineraries.push({ destination: r.destination, packageDealId: 0, status: 'FAILED', productUrl: '' });
+        continue;
+      }
+
+      log(`${r.destination} trip is ready.`);
+
+      const productUrl = isNaN(Number(packageDealId))
+        ? `https://www.getsetyo.club/trip/details/${packageDealId}`
+        : `https://getsetyo.com/product/${packageDealId}`;
+
+      itineraries.push({ destination: r.destination, packageDealId, status: 'COMPLETED', productUrl });
+    }
+
+    log(`All ${itineraries.length} trips are ready to explore.`);
+    return { generated_itineraries: itineraries };
+  }
+});
+
+// 9. MapAgent — plots coordinates
+const mapAgent = new TaskAgent({
+  name: 'MapAgent',
+  description: 'Places all destinations on an interactive map',
+  taskFn: async (state, log) => {
+    state._agentIndex = 8;
+    log(`Plotting destinations on the map...`);
+
+    const visitedDestinations: VisitedDestination[] = state.visited_destinations;
+    const recommendations: TravelRecommendation[] = state.ai_recommendations;
+    const geminiVisitedPins: any[] = state.gemini_map_visited || [];
+    const geminiRecommendedPins: any[] = state.gemini_map_recommended || [];
+
+    const resolveCoords = (pool: any[], name: string, country: string) => {
+      const nameLower = name.toLowerCase();
+      const match = pool.find((l: any) => {
+        if (typeof l?.name !== "string") return false;
+        const lName = l.name.toLowerCase();
+        return lName === nameLower || lName.includes(nameLower) || nameLower.includes(lName);
+      });
+      if (match && typeof match.lat === "number" && typeof match.lng === "number" && (match.lat !== 0 || match.lng !== 0)) {
+        return { lat: match.lat, lng: match.lng };
+      }
+      const dbCoords = getCoordinates(name, country);
+      if (dbCoords.lat !== 0 || dbCoords.lng !== 0) return dbCoords;
+      if (match && typeof match.lat === "number" && typeof match.lng === "number") {
+        return { lat: match.lat, lng: match.lng };
+      }
+      return { lat: 0, lng: 0 };
+    };
+
+    const mapData: MapData = {
+      visitedLocations: visitedDestinations.map(v => {
+        const c = resolveCoords(geminiVisitedPins, v.destination, v.country);
+        return { lat: c.lat, lng: c.lng, name: v.destination, country: v.country, type: "visited" as const };
+      }),
+      recommendedLocations: recommendations.map(r => {
+        const c = resolveCoords(geminiRecommendedPins, r.destination, r.country);
+        return { lat: c.lat, lng: c.lng, name: r.destination, country: r.country, type: "recommended" as const };
+      })
+    };
+
+    log(`${mapData.visitedLocations.length + mapData.recommendedLocations.length} destinations pinned on the map.`);
+    return { map_data: mapData };
+  }
+});
+
+// 10. ResultAggregatorAgent — compiles final dossier
+const aggregatorAgent = new TaskAgent({
+  name: 'ResultAggregatorAgent',
+  description: 'Assembles the final travel profile and caches results',
+  taskFn: async (state, log) => {
+    state._agentIndex = 9;
+    log(`Finalizing your travel profile...`);
+
+    const profile: InstagramProfile = state.instagram_profile;
+    const posts: InstagramPost[] = state.instagram_posts;
+    const reels: InstagramPost[] = state.instagram_reels;
+
+    const finalDossier: CreatorIntelligenceDossier = {
+      instagramUsername: state.username,
+      creatorProfile: profile,
+      instagramData: { profile, posts, reels, taggedPosts: [] },
+      structuredContent: {
+        bio: profile.biography,
+        captions: posts.concat(reels).map(p => p.caption),
+        hashtags: Array.from(new Set([...posts.flatMap(p => p.hashtags), ...reels.flatMap(p => p.hashtags)])),
+        mentions: Array.from(new Set([...posts.flatMap(p => p.mentions), ...reels.flatMap(p => p.mentions)])),
+        locations: (state.visited_destinations as VisitedDestination[]).map(v => v.destination)
+      },
+      visitedDestinations: state.visited_destinations,
+      travelPersona: state.travel_persona,
+      recommendations: state.ai_recommendations,
+      prompts: state.ai_prompts,
+      generatedItineraries: state.generated_itineraries,
+      mapData: state.map_data,
+      generatedAt: new Date().toISOString()
+    };
+
+    redis.set(`creator-analysis:${state.username}`, finalDossier, 2592000);
+    redis.set(`creator-itineraries:${state.username}`, { itineraries: finalDossier.generatedItineraries }, 2592000);
+
+    state.final_dossier = finalDossier;
+    log(`Your travel profile is ready!`);
+    return {};
+  }
+});
+
+// --- GOOGLE ADK: SEQUENTIAL AGENT PIPELINE ---
+const travelPipeline = new SequentialAgent({
+  name: 'TravelIntelligencePipeline',
+  description: 'Multi-step agentic workflow for creator travel intelligence analysis',
+  subAgents: [
+    plannerAgent,
+    extractionAgent,
+    structuringAgent,
+    detectionAgent,
+    personaAgent,
+    recommendationAgent,
+    promptGenAgent,
+    itineraryAgent,
+    mapAgent,
+    aggregatorAgent,
+  ]
+});
+
+function buildPartialDossier(state: Record<string, any>): Partial<CreatorIntelligenceDossier> | null {
+  const profile: InstagramProfile | undefined = state.instagram_profile;
+  if (!profile) return null;
+
+  const posts: InstagramPost[] = state.instagram_posts || [];
+  const reels: InstagramPost[] = state.instagram_reels || [];
+
+  return {
+    instagramUsername: state.username,
+    creatorProfile: profile,
+    instagramData: { profile, posts, reels, taggedPosts: [] },
+    structuredContent: {
+      bio: profile.biography,
+      captions: posts.concat(reels).map(p => p.caption),
+      hashtags: state.structured_hashtags || Array.from(new Set([...posts.flatMap(p => p.hashtags), ...reels.flatMap(p => p.hashtags)])),
+      mentions: state.structured_mentions || Array.from(new Set([...posts.flatMap(p => p.mentions), ...reels.flatMap(p => p.mentions)])),
+      locations: state.visited_destinations ? (state.visited_destinations as VisitedDestination[]).map(v => v.destination) : (state.structured_locations || [])
+    },
+    visitedDestinations: state.visited_destinations || [],
+    travelPersona: state.travel_persona || undefined as any,
+    recommendations: state.ai_recommendations || [],
+    prompts: state.ai_prompts || [],
+    generatedItineraries: state.generated_itineraries || [],
+    mapData: state.map_data || { visitedLocations: [], recommendedLocations: [] },
+    generatedAt: new Date().toISOString()
+  };
+}
+
+// --- GOOGLE ADK: RUNNER-BACKED AGENT WORKER ---
 async function runAgentWorker(username: string): Promise<void> {
   const job = activeJobs.get(username);
   if (!job) return;
 
-  const logs = job.logs;
-  let logIdCounter = 0;
-  const logStep = (agentName: AgentLog['agentName'], message: string, output?: any) => {
-    logIdCounter++;
-    const log: AgentLog = {
-      id: `${agentName}-${Date.now()}-${logIdCounter}-${Math.random().toString(36).substring(2, 9)}`,
-      agentName,
-      status: 'completed',
-      message,
-      timestamp: new Date().toLocaleTimeString(),
-      output
-    };
-    logs.push(log);
-  };
-
   try {
-    // Stage 1: Planner Agent
-    job.currentAgentIndex = 0;
-    logStep('PlannerAgent', `Initiating Travel Intelligence orchestration pipeline for handle @${username}...`);
-    logStep('PlannerAgent', `Validating Instagram handle format. Status: VALID. Matching extraction profile...`);
-    await new Promise(r => setTimeout(r, 1500));
-
-    // Stage 2: Extraction Agent (LIVE Apify scrape — no dummy data)
-    job.currentAgentIndex = 1;
-    logStep('InstagramExtractionAgent', `Calling Instagram Scraper (Apify backend) to grab profile feed & tagged posts...`);
-    const scraped = await scrapeInstagramProfile(username, (m) => logStep('InstagramExtractionAgent', m));
-    const realProfile = scraped.profile;
-    const realPosts = scraped.posts.filter(p => p.type === "post");
-    const realReels = scraped.posts.filter(p => p.type === "reel");
-    logStep('InstagramExtractionAgent', `Successfully retrieved live data: Biography context, ${realPosts.length} grid elements and ${realReels.length} reels assets from Apify dataset. Stories filter: OMITTED.`);
-
-    // Stage 3: Content Structuring Agent (from REAL scraped content)
-    job.currentAgentIndex = 2;
-    logStep('ContentStructuringAgent', `De-duplicating captions and hashtags. Consolidating mentions and geotag indicators...`);
-    const realCaptions = scraped.posts.map(p => p.caption).filter(Boolean);
-    const realHashtags = Array.from(new Set(scraped.posts.flatMap(p => p.hashtags)));
-    const realMentions = Array.from(new Set(scraped.posts.flatMap(p => p.mentions)));
-    const realLocations = Array.from(new Set(scraped.posts.map(p => p.location).filter(Boolean)));
-    logStep('ContentStructuringAgent', `Structured captions content. Extracted ${realLocations.length} localized check-in profiles and ${realHashtags.length} tags from ${realCaptions.length} captions.`);
-    await new Promise(r => setTimeout(r, 1500));
-
-    // Stage 4: Travel Detection Agent
-    job.currentAgentIndex = 3;
-    logStep('TravelDetectionAgent', `Analyzing biography elements, geotag logs and post context to extract actual visited places...`);
-    
-    // Now trigger Gemini or fallback to compile the core dossier
-    const client = getGeminiClient();
-    let dossierData: CreatorIntelligenceDossier;
-
-    if (!client) {
-      logStep('TravelDetectionAgent', `Intel engine halted. GEMINI_API_KEY is missing.`);
-      throw new Error("GEMINI_API_KEY is not configured. Please open AI Studio 'Settings' -> 'Secrets' and set your Gemini API key to run a live travel intelligence analysis.");
-    }
-
-    logStep('TravelDetectionAgent', `Invoking Google GenAI ('gemini-3.5-flash') to perform deep intelligence synthesis on REAL scraped Instagram data...`);
-    try {
-      const realDataContext = JSON.stringify({
-        profile: {
-          username: realProfile.username,
-          fullName: realProfile.fullName,
-          biography: realProfile.biography,
-          followersCount: realProfile.followersCount,
-          postsCount: realProfile.postsCount
-        },
-        captions: realCaptions,
-        hashtags: realHashtags,
-        mentions: realMentions,
-        locations: realLocations
-      }, null, 2);
-
-      const prompt = `
-        You are a travel intelligence analyst. Below is REAL data scraped (via Apify) from the public Instagram
-        account @${realProfile.username}. Analyze ONLY this real content — do NOT invent posts, captions, or profile facts.
-
-        REAL_SCRAPED_DATA:
-        ${realDataContext}
-
-        Based strictly on the real biography, captions, hashtags, mentions and locations above, produce a travel
-        intelligence analysis:
-        - Identify 2 to 3 visited destinations actually evidenced in the real content (with visitCount, source evidence quoting/paraphrasing the real captions or locations, and confidence). If the real content has little travel signal, infer conservatively and lower the confidence.
-        - Define travel persona: budgetProfile ('Budget', 'Mid-range', or 'Luxury'), travelStyle ('Relaxed', 'Adventure', 'Immersive', or 'Fast-paced'), travellerType ('Solo', 'Couple', 'Group', 'Family'), activityPreferences, travelFrequency ('High', 'Medium', 'Low').
-        - Generate exactly 5 targeted recommendations with category: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'. Give a detailed score (0 to 100) and reasoning grounded in the real content for each.
-        - Formulate 5 custom travel prompts for the GetSetYo Itinerary API (one per recommendation).
-        - Plot coordinate positions (latitude and longitude as numbers) for each visited and recommended destination.
-
-        The output must strictly be valid JSON matching this exact structure (do NOT include instagramData or creatorProfile — those come from the real scrape):
-        {
-          "visitedDestinations": [
-            { "destination": "Bali", "country": "Indonesia", "visitCount": 3, "confidence": 0.95, "sources": ["caption"], "evidence": "string", "timeline": "2024-05" }
-          ],
-          "travelPersona": { "budgetProfile": "Luxury", "travelStyle": "Relaxed", "travellerType": "Couple", "activityPreferences": ["string"], "travelFrequency": "High", "confidence": 0.88, "hotelPreference": "string", "foodPreference": "string", "summary": "string" },
-          "recommendations": [
-            { "destination": "Maldives", "country": "Maldives", "category": "Similar Destination", "score": 95, "reason": "string" }
-          ],
-          "prompts": [
-            { "destination": "Maldives", "prompt": "string" }
-          ],
-          "mapData": {
-            "visitedLocations": [ { "lat": -8.4, "lng": 115.1, "name": "Bali", "country": "Indonesia", "type": "visited" } ],
-            "recommendedLocations": [ { "lat": 3.2, "lng": 73.2, "name": "Maldives", "country": "Maldives", "type": "recommended" } ]
-          }
-        }
-        Ensure the JSON is completely valid, fully populated, and has NO trailing commas.
-      `;
-
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.2
-        }
-      });
-
-      const text = response.text || "";
-      let cleanText = text.trim();
-      if (cleanText.startsWith("```")) {
-        cleanText = cleanText.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/, "");
-      }
-      const parsed = JSON.parse(cleanText.trim());
-
-      const parsedPersona = parsed.travelPersona || {};
-
-      // Use the REAL scraped profile and posts (no Gemini-generated dummy data here).
-      const profile: InstagramProfile = realProfile;
-      const geminiPosts = realPosts;
-      const geminiReels = realReels;
-
-      const travelPersona: TravelPersona = {
-        budgetProfile: ['Budget', 'Mid-range', 'Luxury'].includes(parsedPersona.budgetProfile) ? parsedPersona.budgetProfile : "Luxury",
-        travelStyle: ['Relaxed', 'Adventure', 'Immersive', 'Fast-paced'].includes(parsedPersona.travelStyle) ? parsedPersona.travelStyle : "Relaxed",
-        travellerType: ['Solo', 'Couple', 'Group', 'Family'].includes(parsedPersona.travellerType) ? parsedPersona.travellerType : "Couple",
-        activityPreferences: Array.isArray(parsedPersona.activityPreferences) ? parsedPersona.activityPreferences : ["Sightseeing", "Food Tours"],
-        travelFrequency: ['High', 'Medium', 'Low'].includes(parsedPersona.travelFrequency) ? parsedPersona.travelFrequency : "High",
-        confidence: typeof parsedPersona.confidence === "number" ? parsedPersona.confidence : 0.95,
-        hotelPreference: parsedPersona.hotelPreference || "Boutique stays & designer spaces",
-        foodPreference: parsedPersona.foodPreference || "Local gastronomy and fine dining",
-        summary: parsedPersona.summary || `An authentic content creator on Instagram exploring hidden gems. Likes elegant, tailored travel styles.`
-      };
-
-      const visitedDestinations: VisitedDestination[] = (parsed.visitedDestinations || []).map((v: any) => ({
-        destination: v.destination || "Kyoto",
-        country: v.country || "Japan",
-        visitCount: typeof v.visitCount === "number" ? v.visitCount : 1,
-        confidence: typeof v.confidence === "number" ? v.confidence : 0.96,
-        sources: Array.isArray(v.sources) ? v.sources : ["caption"],
-        evidence: v.evidence || "Mentioned in public stories and grid feeds",
-        timeline: v.timeline || "2024-05"
-      }));
-
-      const recommendations: TravelRecommendation[] = (parsed.recommendations || []).map((r: any) => ({
-        destination: r.destination || "Amalfi Coast",
-        country: r.country || "Italy",
-        category: ['Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'].includes(r.category) ? r.category : "Similar Destination",
-        score: typeof r.score === "number" ? r.score : 92,
-        reason: r.reason || "Matches travel style preferences and aesthetic cues perfectly."
-      }));
-
-      const prompts: ItineraryPrompt[] = (parsed.prompts || []).map((p: any) => ({
-        destination: p.destination || "Amalfi Coast",
-        prompt: p.prompt || `Generate a beautiful 5-day itinerary focused on local highlights.`
-      }));
-
-      // Build map pins directly from the analysis so EVERY visited city and
-      // every recommended ("next possible") city is plotted — matching the
-      // recommendations/itineraries 1:1. Prefer Gemini's own coordinates when
-      // present, otherwise resolve via the coordinates lookup.
-      const geminiVisitedPins: any[] = parsed.mapData?.visitedLocations || [];
-      const geminiRecommendedPins: any[] = parsed.mapData?.recommendedLocations || [];
-      const resolveCoords = (pool: any[], name: string, country: string) => {
-        const match = pool.find((l: any) => typeof l?.name === "string" && l.name.toLowerCase() === name.toLowerCase());
-        if (match && typeof match.lat === "number" && typeof match.lng === "number") {
-          return { lat: match.lat, lng: match.lng };
-        }
-        return getCoordinates(name, country);
-      };
-
-      const mapData: MapData = {
-        visitedLocations: visitedDestinations.map(v => {
-          const c = resolveCoords(geminiVisitedPins, v.destination, v.country);
-          return { lat: c.lat, lng: c.lng, name: v.destination, country: v.country, type: "visited" as const };
-        }),
-        recommendedLocations: recommendations.map(r => {
-          const c = resolveCoords(geminiRecommendedPins, r.destination, r.country);
-          return { lat: c.lat, lng: c.lng, name: r.destination, country: r.country, type: "recommended" as const };
-        })
-      };
-
-      dossierData = {
-        instagramUsername: username,
-        creatorProfile: profile,
-        instagramData: {
-          profile: profile,
-          posts: geminiPosts,
-          reels: geminiReels,
-          taggedPosts: []
-        },
-        structuredContent: {
-          bio: profile.biography,
-          captions: geminiPosts.concat(geminiReels).map(p => p.caption),
-          hashtags: Array.from(new Set([
-            ...geminiPosts.flatMap(p => p.hashtags),
-            ...geminiReels.flatMap(p => p.hashtags)
-          ])),
-          mentions: Array.from(new Set([
-            ...geminiPosts.flatMap(p => p.mentions),
-            ...geminiReels.flatMap(p => p.mentions)
-          ])),
-          locations: visitedDestinations.map(v => v.destination)
-        },
-        visitedDestinations,
-        travelPersona,
-        recommendations,
-        prompts,
-        generatedItineraries: [], 
-        mapData,
-        generatedAt: new Date().toISOString()
-      };
-
-      logStep('TravelDetectionAgent', `Gemini synthesis complete. Identified ${dossierData.visitedDestinations.length} pristine visited destinations with timeline records.`);
-    } catch (err: any) {
-      console.error("Gemini compilation error:", err);
-      logStep('TravelDetectionAgent', `Intel engine failed: ${err.message || err}`);
-      throw err;
-    }
-
-    // Stage 5: Travel Persona Agent
-    job.currentAgentIndex = 4;
-    logStep('TravelPersonaAgent', `Interpreting budget profiles, style tags, and luxury indicator markers...`);
-    logStep('TravelPersonaAgent', `Profile generated: Style: [${dossierData.travelPersona.travelStyle}], Budget: [${dossierData.travelPersona.budgetProfile}]. Confidence rating: ${Math.round(dossierData.travelPersona.confidence * 100)}%.`);
-    await new Promise(r => setTimeout(r, 1200));
-
-    // Stage 6: Recommendation Agent
-    job.currentAgentIndex = 5;
-    logStep('RecommendationAgent', `Compiling targeting recommendations: 1 Similar, 1 Aspirational, 1 Hidden Gem, 1 Trending, and 1 Stretch destination...`);
-    logStep('RecommendationAgent', `5 Target travel coordinates approved matching the creator's luxury alignment score.`);
-    await new Promise(r => setTimeout(r, 1200));
-
-    // Stage 7: Prompt Generation Agent
-    job.currentAgentIndex = 6;
-    logStep('PromptGenerationAgent', `Drafting automated high-quality system prompts optimized for GetSetYo package deals APIs...`);
-    dossierData.prompts.forEach((p, index) => {
-      logStep('PromptGenerationAgent', `Created Itinerary Prompt ${index+1} for [${p.destination}].`);
+    const session = await adkSessionService.createSession({
+      appName: 'creator-travel-intel',
+      userId: username,
+      state: { username, _logs: [] as AgentLog[], _agentIndex: 0 }
     });
-    await new Promise(r => setTimeout(r, 1000));
 
-    // Stage 8: Itinerary Polling & Status Agent (Poll status simulation)
-    job.currentAgentIndex = 7;
-    logStep('ItineraryGenerationAgent', `Connecting to GetSetYo package routing engines... Queuing 5 automated requests.`);
-    
-    const getsetyoApiUrl = "https://www.getsetyo.club/itinerary/generate-ai-itinerary";
-    
-    const getsetyoJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLWp3dCIsImV4dGVybmFsSWQiOiIwcGFLNVJ4TyIsImlhdCI6MTc3OTg5NTY3NiwiZXhwIjoxNzk1NzM3NjAwfQ.OPv0QUFAOsCAwpRN5VdZdYNuMOP3B0kbAqHm3dAW4X8";
-    const getsetyoSession = "WKd9AYtubvoqW3gpiWgL21JQfyhTFN42iwk4qJ0xIjHpaBCWZJ3CsVdsutt2yj47";
+    const sessionId = session.id;
 
-    const getsetyoCookie = `device-id-new=1bbf23a0-f0c0-4b49-9c8b-d5e9718f225e; _fbp=fb.1.1778495407282.712203300242907940; external-id=0paK5RxO; fbm_3228197347484521=base_domain=; login-session-token=${getsetyoSession}; jwt=${getsetyoJwt}; _fw_crm_v=6dde7b48-d0d3-4cd0-b102-255e989da9f4; first_session=%7B%22visits%22%3A5%2C%22start%22%3A1780039235783%2C%22last_visit%22%3A1780046402928%2C%22url%22%3A%22https%3A%2F%2Fwww.getsetyo.club%2Ftrip%2Fdetails%2F1vdny6%22%2C%22path%22%3A%22%2Ftrip%2Fdetails%2F1vdny6%22%2C%22referrer%22%3A%22%22%2C%22referrer_info%22%3A%7B%22host%22%3A%22%22%2C%22path%22%3A%22blank%22%2C%22protocol%22%3A%22about%3A%22%2C%22port%22%3A80%2C%22search%22%3A%22%22%2C%22query%22%3A%7B%7D%7D%2C%22search%22%3A%7B%22engine%22%3Anull%2C%22query%22%3Anull%7D%2C%22prev_visit%22%3A1780043850993%2C%22time_since_last_visit%22%3A2551935%2C%22version%22%3A0.4%7D; amp_aaa88d=1bbf23a0-f0c0-4b49-9c8b-d5e9718f225e.MHBhSzVSeE8=..1jqngee9q.1jqngf5ci.3p8.1g.3qo`;
+    const runner = new Runner({
+      agent: travelPipeline,
+      appName: 'creator-travel-intel',
+      sessionService: adkSessionService,
+    });
 
-    logStep('ItineraryGenerationAgent', `Initiating real-world API connection to GetSetYo Engine: ${getsetyoApiUrl}...`);
-
-    const itineraries: GetSetYoItinerary[] = [];
-
-    for (let idx = 0; idx < dossierData.recommendations.length; idx++) {
-      const r = dossierData.recommendations[idx];
-      const customPromptObj = dossierData.prompts.find((p: any) => p.destination === r.destination);
-      const promptString = customPromptObj ? customPromptObj.prompt : `Generate a beautiful 5-day itinerary focused on ${r.destination}.`;
-
-      logStep('ItineraryGenerationAgent', `Posting request to GetSetYo API for [${r.destination}]...`);
-      
-      try {
-        const requestBody = {
-          requirement: {
-            startDate: "2026-08-09",
-            paxDetails: {
-              adultCount: 2,
-              childCount: 0,
-              roomCount: 1,
-              childAges: []
-            },
-            departureCity: {
-              objectID: 20231,
-              name: "Bengaluru"
-            }
-          },
-          templateCode: "STEP1,STEP2,STEP3",
-          aiPrompt: {
-            model: "CHATGPT",
-            templateGroup: null,
-            templateCode: "STEP1,STEP2,STEP3",
-            replaceVariables: {
-              user_prompt: promptString
-            }
-          },
-          itineraryExternalId: null
-        };
-
-        const baseHeaders: any = {
-          "accept": "application/hal+json",
-          "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
-          "content-type": "application/json",
-          "origin": "https://www.getsetyo.club",
-          "referer": "https://www.getsetyo.club/dashboard/itinerary/builder?activeTab=with-ai",
-          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-          "priority": "u=1, i",
-          "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
-          "sec-ch-ua-mobile": "?0",
-          "sec-ch-ua-platform": '"macOS"',
-          "sec-fetch-dest": "empty",
-          "sec-fetch-mode": "cors",
-          "sec-fetch-site": "same-origin"
-        };
-
-        if (getsetyoJwt) {
-          baseHeaders["Authorization"] = `Bearer ${getsetyoJwt}`;
-        }
-
-        const { response, resData, usedCookie } = await fetchGetSetYo(
-          getsetyoApiUrl,
-          baseHeaders,
-          JSON.stringify(requestBody),
-          getsetyoCookie,
-          (msg) => logStep('ItineraryGenerationAgent', msg)
-        );
-
-        console.log(`[GetSetYo API Response for ${r.destination}]:`, JSON.stringify(resData));
-
-        let packageDealId: string | number | null = null;
-        if (resData) {
-          packageDealId = resData.packageDealId || 
-                          resData.dealId || 
-                          resData.itineraryId || 
-                          resData.tripId || 
-                          resData.id || 
-                          resData.itineraryExternalId ||
-                          resData.externalId ||
-                          resData.slug ||
-                          (resData.data && (resData.data.id || resData.data.itineraryId || resData.data.dealId || resData.data.packageDealId || resData.data.slug)) ||
-                          (resData.trip && (resData.trip.id || resData.trip.itineraryId || resData.trip.slug || resData.trip.externalId)) ||
-                          (resData.requirement && resData.requirement.itineraryExternalId);
-        }
-
-        if (!packageDealId) {
-          console.warn(`No explicit ID found in returned keys: ${Object.keys(resData || {}).join(", ")}. Generating a dynamic identifier fallback.`);
-          packageDealId = `fallback-${Date.now()}-${idx}`;
-        }
-
-        logStep('ItineraryGenerationAgent', `Deal resolved: ${r.destination} (#${packageDealId}) completed.`);
-
-        const productUrl = isNaN(Number(packageDealId)) 
-          ? `https://www.getsetyo.club/trip/details/${packageDealId}` 
-          : `https://getsetyo.com/product/${packageDealId}`;
-
-        // Real itinerary lives at the GetSetYo product URL. We only keep the
-        // values the API actually returns — no fabricated duration/cost/hotels.
-        // IN_PROGRESS at creation means our generation task is done.
-        itineraries.push({
-          destination: r.destination,
-          packageDealId,
-          status: 'COMPLETED',
-          productUrl
-        });
-      } catch (apiErr: any) {
-        console.error(`GetSetYo API call failed for ${r.destination}:`, apiErr);
-        logStep('ItineraryGenerationAgent', `GetSetYo API call failed for [${r.destination}]: ${apiErr.message || apiErr}`);
-        throw new Error(`GetSetYo Itinerary API call failed for ${r.destination}: ${apiErr.message || apiErr}`);
+    for await (const event of runner.runAsync({
+      userId: username,
+      sessionId,
+      newMessage: { role: 'user', parts: [{ text: `Analyze travel profile for @${username}` }] }
+    })) {
+      const currentSession = await adkSessionService.getSession({ appName: 'creator-travel-intel', userId: username, sessionId });
+      if (currentSession) {
+        const state = currentSession.state as Record<string, any>;
+        job.logs = state._logs || [];
+        job.currentAgentIndex = state._agentIndex || 0;
+        job.dossier = state.final_dossier || buildPartialDossier(state);
       }
     }
 
-    logStep('ItineraryGenerationAgent', `All 5 GetSetYo itineraries resolved successfully. Live Product URLs compiled.`);
+    const finalSession = await adkSessionService.getSession({ appName: 'creator-travel-intel', userId: username, sessionId });
+    if (finalSession) {
+      const state = finalSession.state as Record<string, any>;
+      job.logs = state._logs || [];
+      job.dossier = state.final_dossier || buildPartialDossier(state);
+    }
 
-    job.dossier = {
-      ...dossierData,
-      generatedItineraries: itineraries
-    };
-
-    // Stage 9: Map Agent
-    job.currentAgentIndex = 8;
-    logStep('MapAgent', `Resolving localized spatial geographical overlays using Google Maps Javascript Platform API...`);
-    logStep('MapAgent', `Successfully plotted ${dossierData.mapData.visitedLocations.length} visited & ${dossierData.mapData.recommendedLocations.length} recommended pin routes.`);
-    await new Promise(r => setTimeout(r, 1200));
-
-    // Stage 10: Result Aggregator Agent
-    job.currentAgentIndex = 9;
-    logStep('ResultAggregatorAgent', `Dossier compilation complete. Compacting metadata and registering entries in Google Memorystore Redis Cache...`);
-    
-    const finalDossier: CreatorIntelligenceDossier = {
-      ...(job.dossier as CreatorIntelligenceDossier),
-      generatedAt: new Date().toISOString()
-    };
-
-    // Save in Redis Cache Schemas as specified
-    redis.set(`creator-analysis:${username}`, finalDossier, 2592000); // 30 Days expiry
-    redis.set(`creator-itineraries:${username}`, { itineraries: finalDossier.generatedItineraries }, 2592000);
-
-    job.dossier = finalDossier;
-    job.status = 'completed';
-    logStep('ResultAggregatorAgent', `Platform fully loaded. Creator profile analysis successfully compiled and indexed. Cache TTL set to 30 Days.`);
+    job.status = job.dossier ? 'completed' : 'failed';
 
   } catch (err: any) {
     console.error("Agent pipeline crashed", err);
@@ -682,10 +898,48 @@ async function runAgentWorker(username: string): Promise<void> {
       id: `failed-${Date.now()}`,
       agentName: 'ResultAggregatorAgent',
       status: 'failed',
-      message: `Criticial Orchestrator Crash: ${err.message || 'Unknown agent validation error'}. Retrying downstream pipeline...`,
-      timestamp: new Date().toLocaleTimeString()
+      message: `Something went wrong: ${err.message || 'An unexpected error occurred'}. Please try again.`,
+      timestamp: new Date().toISOString()
     };
     job.logs.push(errorLog);
+  }
+}
+
+// --- ITINERARY DETAIL POLLING ---
+async function fetchItineraryDetails(packageDealId: number | string): Promise<Partial<GetSetYoItinerary>> {
+  try {
+    const dealRes = await fetch(`https://getsetyo.com/package-deal?id=${packageDealId}`, {
+      headers: { 'accept': 'application/json', 'content-type': 'application/json' }
+    });
+    if (!dealRes.ok) return { itineraryStatus: 'IN_PROGRESS' };
+    const dealData = await dealRes.json();
+    const externalId = dealData.externalId;
+    if (!externalId) return { itineraryStatus: 'IN_PROGRESS' };
+
+    const itinRes = await fetch(`https://getsetyo.com/itinerary/itinerary-v2?itineraryExternalId=${externalId}`, {
+      headers: { 'accept': 'application/json' }
+    });
+    if (!itinRes.ok) return { externalId, itineraryStatus: 'IN_PROGRESS' };
+    const itinData = await itinRes.json();
+
+    const itinerary = itinData.itinerary;
+    const priceDetails = itinerary?.priceDetails;
+    const mediaList = itinerary?.mediaList || itinData.itinerary?.allMediaFromAllComponents?.HOTEL || [];
+    const coverMedia = itinData.coverMedia;
+
+    return {
+      externalId,
+      title: itinerary?.title || '',
+      summary: itinerary?.summary || '',
+      coverImageUrl: coverMedia?.mediaUrl || mediaList?.[0]?.mediaUrl || '',
+      images: mediaList.filter((m: any) => m.mediaType === 'IMAGE').map((m: any) => m.mediaUrl).slice(0, 5),
+      daysCount: itinerary?.days?.length || 0,
+      startingPrice: priceDetails?.indicativeSalePrice || priceDetails?.totalFare?.salePrice || 0,
+      currencyCode: priceDetails?.totalFare?.currencyCode || 'INR',
+      itineraryStatus: itinData.status === 'COMPLETED' ? 'COMPLETED' : itinData.status === 'FAILED' ? 'FAILED' : 'IN_PROGRESS',
+    };
+  } catch {
+    return { itineraryStatus: 'IN_PROGRESS' };
   }
 }
 
@@ -713,7 +967,7 @@ app.post("/api/analyze", (req, res) => {
           id: 'planner-cache-hit',
           agentName: 'PlannerAgent',
           status: 'completed',
-          message: `Simulated Redis cache hit. Serving completed intelligence dossier for handle @${cleanUsername} instantly. TTL: 30 Days.`,
+          message: `Travel profile for @${cleanUsername} loaded instantly.`,
           timestamp: new Date().toLocaleTimeString()
         }
       ]
@@ -786,6 +1040,30 @@ app.get("/api/admin/redis-cache", (req, res) => {
     keys: "creator-analysis:*, creator-itineraries:*",
     activeJobsCount: activeJobs.size
   });
+});
+
+// GET itinerary details polling endpoint
+app.get("/api/itinerary-details", async (req, res) => {
+  const { username } = req.query;
+  if (!username) return res.status(400).json({ error: "username required" });
+
+  const cleanUsername = (username as string).trim().replace(/^@/, "");
+  const cachedDossier = redis.get(`creator-analysis:${cleanUsername}`);
+  const dossier = cachedDossier || activeJobs.get(cleanUsername)?.dossier;
+  if (!dossier) return res.status(404).json({ error: "No analysis found" });
+
+  const itineraries: GetSetYoItinerary[] = (dossier as any).generatedItineraries || [];
+  if (itineraries.length === 0) return res.json({ itineraries: [] });
+
+  const updated = await Promise.all(itineraries.map(async (it) => {
+    if (!it.packageDealId || it.packageDealId === 0) return it;
+    if (it.itineraryStatus === 'COMPLETED' || it.itineraryStatus === 'FAILED') return it;
+
+    const details = await fetchItineraryDetails(it.packageDealId);
+    return { ...it, ...details };
+  }));
+
+  res.json({ itineraries: updated });
 });
 
 // --- VITE DEV AND PROD ROUTING ENGINE HANDLINGS ---

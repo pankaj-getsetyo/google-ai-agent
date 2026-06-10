@@ -72,7 +72,7 @@ export default function App() {
               clearInterval(pollInterval!);
             } else if (data.status === 'failed') {
               setStatus('failed');
-              setErrorText("The intelligence agent pipeline crashed trying to validate profiles. Please retry.");
+              setErrorText("Something went wrong while analyzing this profile. Please try again.");
               clearInterval(pollInterval!);
             } else {
               // Estimate visual progress based on active agent
@@ -95,6 +95,7 @@ export default function App() {
     };
   }, [status, username]);
 
+
   const handleAnalyze = async (targetUsername: string = username) => {
     if (!targetUsername.trim()) return;
 
@@ -113,7 +114,7 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error("Trigger endpoint returned non-200 state.");
+        throw new Error("Could not start the analysis. Please try again.");
       }
 
       const data = await res.json();
@@ -130,7 +131,7 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
       setStatus('failed');
-      setErrorText("Failed to establish server request. Double-check backend server status.");
+      setErrorText("Could not connect to the server. Please check your connection and try again.");
     }
   };
 
@@ -175,7 +176,7 @@ export default function App() {
               </div>
               <div className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] flex items-center gap-2 text-stone-400">
                 <Cpu className="w-3.5 h-3.5 text-brass-300" />
-                <span>LLM: <span className="text-stone-100">Gemini 3.5 Flash</span></span>
+                <span>AI: <span className="text-stone-100">Active</span></span>
               </div>
             </div>
           )}
@@ -307,7 +308,7 @@ export default function App() {
                         {DEBUG_MODE && (
                           <>
                             <span className="w-1 h-1 rounded-full bg-stone-700" />
-                            <span>Confidence {Math.round(dossier.travelPersona.confidence * 100)}%</span>
+                            <span>Confidence {Math.round((dossier.travelPersona?.confidence || 0) * 100)}%</span>
                           </>
                         )}
                       </div>
@@ -319,7 +320,7 @@ export default function App() {
                       { key: 'persona', label: 'Trip Style' },
                       { key: 'history', label: 'Places Visited' },
                       { key: 'map', label: 'Map' },
-                      { key: 'itineraries', label: `Itineraries (${dossier.generatedItineraries.filter(i => i.status === 'COMPLETED').length})` },
+                      { key: 'itineraries', label: `Itineraries (${(dossier.recommendations || []).length})` },
                       ...(DEBUG_MODE ? [{ key: 'agentSwarm', label: 'Agent Trace' }, { key: 'architecture', label: 'Tech Specs' }] : [])
                     ] as { key: typeof activeTab; label: string }[]).map((tab) => (
                       <button
@@ -341,72 +342,82 @@ export default function App() {
                 {/* TAB CONTENT 1: TRAVEL PERSONA */}
                 {activeTab === 'persona' && (
                   <div className="space-y-5 animate-rise" id="tab-persona">
-                    <div className="bg-white/[0.02] rounded-3xl border border-white/[0.06] p-7 flex flex-col md:flex-row gap-7">
-                      <div className="flex-1 space-y-5">
-                        <div>
-                          <span className="eyebrow text-brass-300">Your bio</span>
-                          <p className="text-stone-300 text-[15px] italic font-display font-light mt-2 leading-relaxed">
-                            "{dossier.creatorProfile.biography}"
-                          </p>
-                        </div>
-
-                        <div className="h-px bg-white/[0.06]" />
-
-                        <div>
-                          <span className="eyebrow text-stone-500">Your travel style</span>
-                          <p className="text-stone-300 text-sm mt-2 leading-relaxed">{dossier.travelPersona.summary}</p>
-                        </div>
-                      </div>
-
-                      {/* Classification metrics */}
-                      <div className="w-full md:w-64 shrink-0 bg-white/[0.02] p-5 border border-white/[0.06] rounded-2xl space-y-4">
-                        <div className="flex items-center gap-2 pb-3 border-b border-white/[0.06]">
-                          <Sliders className="w-4 h-4 text-brass-300" strokeWidth={1.5} />
-                          <span className="text-xs font-medium text-stone-300 tracking-wide">At a glance</span>
-                        </div>
-
-                        <div className="space-y-3 text-xs">
-                          {[
-                            { label: 'Travel style', value: dossier.travelPersona.travelStyle },
-                            { label: 'Budget', value: dossier.travelPersona.budgetProfile, accent: true },
-                            { label: 'Travels as', value: dossier.travelPersona.travellerType },
-                            { label: 'Frequency', value: dossier.travelPersona.travelFrequency },
-                            { label: 'Stays', value: dossier.travelPersona.hotelPreference, truncate: true }
-                          ].map((row) => (
-                            <div key={row.label} className="flex justify-between items-center gap-3">
-                              <span className="text-stone-500">{row.label}</span>
-                              <span
-                                className={`font-medium text-right ${row.accent ? 'text-brass-300' : 'text-stone-200'} ${row.truncate ? 'truncate max-w-[130px]' : ''}`}
-                                title={row.truncate ? String(row.value) : undefined}
-                              >
-                                {row.value}
-                              </span>
+                    {dossier.travelPersona ? (
+                      <>
+                        <div className="bg-white/[0.02] rounded-3xl border border-white/[0.06] p-7 flex flex-col md:flex-row gap-7">
+                          <div className="flex-1 space-y-5">
+                            <div>
+                              <span className="eyebrow text-brass-300">Your bio</span>
+                              <p className="text-stone-300 text-[15px] italic font-display font-light mt-2 leading-relaxed">
+                                "{dossier.creatorProfile.biography || 'No bio available'}"
+                              </p>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Preferences & Interests grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="bg-white/[0.02] p-6 rounded-3xl border border-white/[0.06] space-y-4">
-                        <span className="eyebrow text-stone-500">Things you love doing</span>
-                        <div className="flex flex-wrap gap-2">
-                          {dossier.travelPersona.activityPreferences.map((act) => (
-                            <span key={act} className="text-xs px-3.5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] text-stone-300">
-                              {act}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                            <div className="h-px bg-white/[0.06]" />
 
-                      <div className="bg-white/[0.02] p-6 rounded-3xl border border-white/[0.06] space-y-4">
-                        <span className="eyebrow text-stone-500">Food you gravitate to</span>
-                        <p className="text-sm text-stone-300 leading-relaxed font-display font-light italic">
-                          {dossier.travelPersona.foodPreference}
-                        </p>
+                            <div>
+                              <span className="eyebrow text-stone-500">Your travel style</span>
+                              <p className="text-stone-300 text-sm mt-2 leading-relaxed">{dossier.travelPersona.summary || 'Analyzing travel style...'}</p>
+                            </div>
+                          </div>
+
+                          <div className="w-full md:w-64 shrink-0 bg-white/[0.02] p-5 border border-white/[0.06] rounded-2xl space-y-4">
+                            <div className="flex items-center gap-2 pb-3 border-b border-white/[0.06]">
+                              <Sliders className="w-4 h-4 text-brass-300" strokeWidth={1.5} />
+                              <span className="text-xs font-medium text-stone-300 tracking-wide">At a glance</span>
+                            </div>
+
+                            <div className="space-y-3 text-xs">
+                              {[
+                                { label: 'Travel style', value: dossier.travelPersona.travelStyle },
+                                { label: 'Budget', value: dossier.travelPersona.budgetProfile, accent: true },
+                                { label: 'Travels as', value: dossier.travelPersona.travellerType },
+                                { label: 'Frequency', value: dossier.travelPersona.travelFrequency },
+                                ...(dossier.travelPersona.hotelPreference ? [{ label: 'Stays', value: dossier.travelPersona.hotelPreference, truncate: true }] : [])
+                              ].filter(row => row.value).map((row) => (
+                                <div key={row.label} className="flex justify-between items-center gap-3">
+                                  <span className="text-stone-500">{row.label}</span>
+                                  <span
+                                    className={`font-medium text-right ${row.accent ? 'text-brass-300' : 'text-stone-200'} ${row.truncate ? 'truncate max-w-[130px]' : ''}`}
+                                    title={row.truncate ? String(row.value) : undefined}
+                                  >
+                                    {row.value}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          {dossier.travelPersona.activityPreferences?.length > 0 && (
+                            <div className="bg-white/[0.02] p-6 rounded-3xl border border-white/[0.06] space-y-4">
+                              <span className="eyebrow text-stone-500">Things you love doing</span>
+                              <div className="flex flex-wrap gap-2">
+                                {dossier.travelPersona.activityPreferences.map((act) => (
+                                  <span key={act} className="text-xs px-3.5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] text-stone-300">
+                                    {act}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {dossier.travelPersona.foodPreference && (
+                            <div className="bg-white/[0.02] p-6 rounded-3xl border border-white/[0.06] space-y-4">
+                              <span className="eyebrow text-stone-500">Food you gravitate to</span>
+                              <p className="text-sm text-stone-300 leading-relaxed font-display font-light italic">
+                                {dossier.travelPersona.foodPreference}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="bg-white/[0.02] rounded-3xl border border-white/[0.06] p-10 flex items-center justify-center">
+                        <p className="text-stone-500 text-sm">Analyzing travel style — this will appear once the AI finishes reading the profile...</p>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -487,40 +498,23 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      {dossier.recommendations.map((rec) => {
-                        const itinerary = dossier.generatedItineraries.find(i => i.destination === rec.destination);
-                        if (!itinerary) return null;
+                      {(dossier.recommendations || []).map((rec) => {
+                        const itinerary = (dossier.generatedItineraries || []).find(i => i.destination === rec.destination);
 
-                        const packageId = itinerary.packageDealId;
-                        const productUrl = itinerary.productUrl || `https://getsetyo.com/product/${packageId}`;
+                        const packageId = itinerary?.packageDealId;
+                        const productUrl = itinerary?.productUrl || '';
+                        const hasLink = productUrl.length > 0 && packageId && packageId !== 0;
 
-                        return (
-                          <a
-                            key={rec.destination}
-                            href={productUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="group p-6 rounded-3xl border border-white/[0.06] bg-white/[0.02] transition-all duration-300 flex flex-col justify-between gap-5 hover:border-brass-400/30 hover:bg-white/[0.035]"
-                            id={`itinerary-card-${rec.destination.replace(/\s+/g, '')}`}
-                          >
+                        const cardContent = (
+                          <>
                             <div className="space-y-4">
                               <div className="flex items-center justify-between">
                                 <span className="eyebrow text-brass-300">{rec.category.replace(' Destination', '')}</span>
-                                {DEBUG_MODE && (
-                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sage-500/10 text-sage-300 border border-sage-500/20">
-                                    {itinerary.status}
-                                  </span>
-                                )}
                               </div>
 
                               <div>
                                 <h5 className="font-display text-2xl font-light text-stone-50 leading-tight">{rec.destination}</h5>
-                                <p className="text-xs text-stone-500 mt-1">
-                                  {rec.country}
-                                  {DEBUG_MODE && (
-                                    <> · match {rec.score}%</>
-                                  )}
-                                </p>
+                                <p className="text-xs text-stone-500 mt-1">{rec.country}</p>
                               </div>
 
                               <p className="text-[13px] text-stone-400 leading-relaxed">
@@ -529,17 +523,36 @@ export default function App() {
                             </div>
 
                             <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between">
-                              {DEBUG_MODE ? (
-                                <span className="text-[11px] font-mono text-stone-600">#{packageId}</span>
-                              ) : (
-                                <span className="text-[11px] text-stone-500">Full day-by-day plan</span>
+                              <span className="text-[11px] text-stone-500">{hasLink ? 'Full day-by-day plan' : 'Recommended for this creator'}</span>
+                              {hasLink && (
+                                <span className="text-sm text-brass-300 group-hover:text-brass-200 font-medium flex items-center gap-1.5 transition-colors">
+                                  View itinerary
+                                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.5} />
+                                </span>
                               )}
-                              <span className="text-sm text-brass-300 group-hover:text-brass-200 font-medium flex items-center gap-1.5 transition-colors">
-                                View itinerary
-                                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.5} />
-                              </span>
                             </div>
+                          </>
+                        );
+
+                        return hasLink ? (
+                          <a
+                            key={rec.destination}
+                            href={productUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group p-6 rounded-3xl border border-white/[0.06] bg-white/[0.02] transition-all duration-300 flex flex-col justify-between gap-5 hover:border-brass-400/30 hover:bg-white/[0.035]"
+                            id={`itinerary-card-${rec.destination.replace(/\s+/g, '')}`}
+                          >
+                            {cardContent}
                           </a>
+                        ) : (
+                          <div
+                            key={rec.destination}
+                            className="p-6 rounded-3xl border border-white/[0.06] bg-white/[0.02] flex flex-col justify-between gap-5"
+                            id={`itinerary-card-${rec.destination.replace(/\s+/g, '')}`}
+                          >
+                            {cardContent}
+                          </div>
                         );
                       })}
                     </div>
@@ -555,7 +568,7 @@ export default function App() {
                           Agent Swarm - Request & Response Deep Trace
                         </h4>
                         <p className="text-xs text-slate-500">
-                          Live visual audit trace of the 10 multi-agent pipeline calls invoking Google GenAI, crawlers, and GetSetYo package servers.
+                          Step-by-step trace of the 10 AI agents working together to analyze the creator's profile and build personalized trips.
                         </p>
                       </div>
                       <span className="text-[11px] font-mono font-semibold bg-emerald-950/40 border border-emerald-800 text-emerald-400 px-3 py-1 rounded-full flex items-center gap-1.5 shrink-0">
@@ -568,16 +581,16 @@ export default function App() {
                       {/* Left: Agent Pipeline Selection */}
                       <div className="lg:col-span-1 flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-1">
                         {[
-                          { index: 0, name: "PlannerAgent", title: "1. Planner Agent", desc: "Pipeline Router & Task Planner", color: "text-indigo-400" },
-                          { index: 1, name: "InstagramExtractionAgent", title: "2. Instagram Scraper", desc: "Data Extractor (Apify Core)", color: "text-violet-400" },
+                          { index: 0, name: "PlannerAgent", title: "1. Planner Agent", desc: "Task Coordinator", color: "text-indigo-400" },
+                          { index: 1, name: "InstagramExtractionAgent", title: "2. Profile Reader", desc: "Instagram Data Reader", color: "text-violet-400" },
                           { index: 2, name: "ContentStructuringAgent", title: "3. Content Refiner", desc: "NLP Normalization & Parsing", color: "text-cyan-400" },
-                          { index: 3, name: "TravelDetectionAgent", title: "4. Travel Detection", desc: "Google Gemini 3.5 AI Core", color: "text-sky-400" },
+                          { index: 3, name: "TravelDetectionAgent", title: "4. Travel Detection", desc: "AI Travel Analyst", color: "text-sky-400" },
                           { index: 4, name: "TravelPersonaAgent", title: "5. Travel Persona", desc: "Behavior & Style Classifier", color: "text-emerald-400" },
                           { index: 5, name: "RecommendationAgent", title: "6. Recommender Matrix", desc: "Heuristic Match Scorer", color: "text-amber-400" },
                           { index: 6, name: "PromptGenerationAgent", title: "7. Prompt Generation", desc: "Query Syntax Composer", color: "text-rose-400" },
                           { index: 7, name: "ItineraryGenerationAgent", title: "8. Itinerary Router", desc: "GetSetYo API Gateway", color: "text-cyan-400" },
                           { index: 8, name: "MapAgent", title: "9. Map GIS Agent", desc: "Geospatial coordinate mapper", color: "text-teal-400" },
-                          { index: 9, name: "ResultAggregatorAgent", title: "10. Results Aggregator", desc: "Redis Cache Indexer", color: "text-pink-400" }
+                          { index: 9, name: "ResultAggregatorAgent", title: "10. Results Compiler", desc: "Final Profile Builder", color: "text-pink-400" }
                         ].map((agent) => {
                           const isSelected = selectedTraceIndex === agent.index;
                           return (
@@ -612,8 +625,8 @@ export default function App() {
                           const traceList = [
                             {
                               name: "PlannerAgent",
-                              role: "Controller / Task router",
-                              description: "Decides task dependencies, maps user input, schedules async jobs via simulated Cloud Pub/Sub, and initiates workflow state logging.",
+                              role: "Task Coordinator",
+                              description: "Coordinates the analysis workflow, validates your input, and assigns each step to the right specialist.",
                               request: {
                                 targetHandle: `@${dossier.instagramUsername}`,
                                 action: "ORCHESTRATE_PIPELINE",
@@ -642,15 +655,15 @@ export default function App() {
                             },
                             {
                               name: "InstagramExtractionAgent",
-                              role: "Scraper Service Connector",
-                              description: "Crawls Instagram public schema records from grid timeline, biographical tags, image assets, likes/comments telemetry, and tagged items stream.",
+                              role: "Profile Reader",
+                              description: "Reads the creator's public Instagram profile — bio, posts, reels, and tagged content — to gather travel signals.",
                               request: {
-                                provider: "Apify Instagram Scraper Service",
+                                provider: "Instagram Public Data Service",
                                 targetHandle: dossier.instagramUsername,
                                 extractionMetrics: ["biography", "posts", "reels", "taggedPosts"]
                               },
                               response: {
-                                status: "SUCCESS",
+                                status: "COMPLETED",
                                 profilePic: dossier.creatorProfile.profilePicUrl,
                                 rawProfile: {
                                   username: dossier.instagramUsername,
@@ -663,14 +676,13 @@ export default function App() {
                                   posts: dossier.instagramData.posts.length,
                                   reels: dossier.instagramData.reels.length,
                                   taggedPosts: dossier.instagramData.taggedPosts.length
-                                },
-                                scrapingStatus: "COMPLETED"
+                                }
                               }
                             },
                             {
                               name: "ContentStructuringAgent",
-                              role: "Data parser & text refiner",
-                              description: "Consolidates all scraped captions, extracts hashtag mentions, geotags, and filters duplicate entries to optimize LLM Token footprint.",
+                              role: "Content Organizer",
+                              description: "Cleans up and organizes captions, hashtags, mentions, and location tags to prepare them for analysis.",
                               request: {
                                 action: "CONSOLIDATE_EXTRACTED_DATA",
                                 inputData: {
@@ -699,14 +711,13 @@ export default function App() {
                             },
                             {
                               name: "TravelDetectionAgent",
-                              role: "Cognitive AI synthesis Core",
-                              description: "Executes cognitive deep scans using LLM reasoning (Gemini 3.5 Flash) to parse natural language context into validated geographic entities.",
+                              role: "AI Travel Analyst",
+                              description: "Uses AI to understand where the creator has actually traveled, based on their posts, captions, and location tags.",
                               request: {
-                                intelEngine: "Google GenAI Core API (TypeScript SDK v0.1)",
-                                model: "gemini-3.5-flash",
+                                engine: "Google AI",
                                 temperature: 0.2,
                                 responseMimeType: "application/json",
-                                systemInstructions: "Analyze only the real scraped Instagram content and maintain structured JSON constraints.",
+                                systemInstructions: "Analyze the public Instagram content and produce structured travel insights.",
                                 sourceDataProvided: {
                                   username: dossier.instagramUsername,
                                   bio: dossier.creatorProfile.biography,
@@ -714,49 +725,46 @@ export default function App() {
                                 }
                               },
                               response: {
-                                status: "PARSED_SUCCESSFULLY",
-                                finalModelUsed: "models/gemini-3.5-flash",
+                                status: "COMPLETED",
                                 visitedDestinationsDetected: dossier.visitedDestinations
                               }
                             },
                             {
                               name: "TravelPersonaAgent",
-                              role: "Behavioral Classifier",
-                              description: "Translates visited histories and food/aesthetic/hotel mentions into definitive budget categories, travel frequencies, and style identifiers.",
+                              role: "Style Profiler",
+                              description: "Determines the creator's travel style, budget level, and preferences based on their travel history and content.",
                               request: {
-                                classifierAlgo: "TravelPersonaClassifier v2.5",
                                 inputSignals: {
-                                  detectedLocations: dossier.visitedDestinations.map(v => v.destination),
-                                  mentionsSample: dossier.structuredContent.mentions
+                                  detectedLocations: (dossier.visitedDestinations || []).map(v => v.destination),
+                                  mentionsSample: dossier.structuredContent?.mentions || []
                                 }
                               },
                               response: {
                                 inferences: {
-                                  budgetProfile: dossier.travelPersona.budgetProfile,
-                                  travelStyle: dossier.travelPersona.travelStyle,
-                                  travellerType: dossier.travelPersona.travellerType,
-                                  travelFrequency: dossier.travelPersona.travelFrequency,
-                                  activityPreferences: dossier.travelPersona.activityPreferences,
-                                  hotelPreference: dossier.travelPersona.hotelPreference,
-                                  foodPreference: dossier.travelPersona.foodPreference,
-                                  summaryText: dossier.travelPersona.summary
+                                  budgetProfile: dossier.travelPersona?.budgetProfile || 'pending',
+                                  travelStyle: dossier.travelPersona?.travelStyle || 'pending',
+                                  travellerType: dossier.travelPersona?.travellerType || 'pending',
+                                  travelFrequency: dossier.travelPersona?.travelFrequency || 'pending',
+                                  activityPreferences: dossier.travelPersona?.activityPreferences || [],
+                                  hotelPreference: dossier.travelPersona?.hotelPreference || '',
+                                  foodPreference: dossier.travelPersona?.foodPreference || '',
+                                  summaryText: dossier.travelPersona?.summary || ''
                                 },
-                                personaIndexConfidence: dossier.travelPersona.confidence
+                                confidence: dossier.travelPersona?.confidence || 0
                               }
                             },
                             {
                               name: "RecommendationAgent",
-                              role: "Heuristic Match Scorer",
-                              description: "Evaluates thousands of tourist tracking profiles against the generator model to recommend matching Aspirational, Similar, and Hidden Gem destinations.",
+                              role: "Destination Matcher",
+                              description: "Finds the best destination matches based on the creator's travel style — including similar, aspirational, and hidden gem picks.",
                               request: {
-                                algorithm: "GetSetYo Target Scoring Matrix v2.0",
                                 constraints: {
-                                  budgetProfile: dossier.travelPersona.budgetProfile,
-                                  travelStyle: dossier.travelPersona.travelStyle
+                                  budgetProfile: dossier.travelPersona?.budgetProfile || 'pending',
+                                  travelStyle: dossier.travelPersona?.travelStyle || 'pending'
                                 }
                               },
                               response: {
-                                recommendationsCompiled: dossier.recommendations.map(rec => ({
+                                recommendationsCompiled: (dossier.recommendations || []).map(rec => ({
                                   destination: rec.destination,
                                   country: rec.country,
                                   category: rec.category,
@@ -767,8 +775,8 @@ export default function App() {
                             },
                             {
                               name: "PromptGenerationAgent",
-                              role: "Query Syntax Composer",
-                              description: "Translates selected target suggestions into custom high-density parameter strings to pass to GetSetYo package deal retrieval APIs.",
+                              role: "Itinerary Planner",
+                              description: "Creates personalized trip briefs for each recommended destination, tailored to the creator's preferences.",
                               request: {
                                 composerModel: "ItineraryPromptGenerator",
                                 inputs: dossier.recommendations.map(r => ({ "dest": r.destination, "category": r.category })),
@@ -780,8 +788,8 @@ export default function App() {
                             },
                             {
                               name: "ItineraryGenerationAgent",
-                              role: "E-Commerce Package Deal Integrator",
-                              description: "Orders parallel batch requests to GetSetYo packaging APIs, and automatically registers package deal prices and hoteliers.",
+                              role: "Trip Builder",
+                              description: "Creates real bookable trip packages on GetSetYo for each recommended destination.",
                               request: {
                                 apiEndpoint: "POST https://www.getsetyo.club/itinerary/generate-ai-itinerary",
                                 queries: dossier.prompts
@@ -798,8 +806,8 @@ export default function App() {
                             },
                             {
                               name: "MapAgent",
-                              role: "Geospatial coordinate mapper",
-                              description: "Invokes Google Maps coordinate geocoding queries to plot visited and recommended markers onto our interactive vector web map canvas.",
+                              role: "Map Plotter",
+                              description: "Places all visited and recommended destinations on an interactive map so you can see them at a glance.",
                               request: {
                                 action: "PLOT_COORDINATES",
                                 coordinateSchema: "EPSG:4326 (WGS84)",
@@ -815,8 +823,8 @@ export default function App() {
                             },
                             {
                               name: "ResultAggregatorAgent",
-                              role: "Caching Aggregating Node",
-                              description: "Compacts metadata schemas, stamps generation timestamps, and persists final analysis results in simulated Redis Cache with 30-day TTL parameters.",
+                              role: "Results Compiler",
+                              description: "Assembles the final travel profile and saves the results so they load instantly for 30 days.",
                               request: {
                                 cacheKeys: [
                                   `creator-analysis:${dossier.instagramUsername}`,
@@ -920,44 +928,44 @@ export default function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       
-                      {/* Space 1: Redis schema */}
+                      {/* Space 1: Data structure */}
                       <div className="space-y-2">
                         <h5 className="font-semibold text-slate-200 flex items-center gap-2">
                           <Database className="w-4 h-4 text-emerald-400" />
-                          Redis Schema Design ({dossier.instagramUsername})
+                          Profile Data ({dossier.instagramUsername})
                         </h5>
                         <p className="text-xs text-slate-400">
-                          Caches high-computation Instagram scraped profiles and recommendation dossiers under static TTL namespaces.
+                          Stores analyzed travel profiles and recommendations for instant retrieval on repeat visits.
                         </p>
                         <pre className="bg-slate-950 p-3.5 rounded-xl border border-slate-900 text-xs text-zinc-300 font-mono overflow-x-auto space-y-1 leading-relaxed">
-                          {`// ID: creator-analysis:${dossier.instagramUsername}
+                          {`// Profile: @${dossier.instagramUsername}
 {
   "travelPersona": {
-    "budgetProfile": "${dossier.travelPersona.budgetProfile}",
-    "travelStyle": "${dossier.travelPersona.travelStyle}"
+    "budgetProfile": "${dossier.travelPersona?.budgetProfile || 'analyzing...'}",
+    "travelStyle": "${dossier.travelPersona?.travelStyle || 'analyzing...'}"
   },
-  "visitedDestinations": [ ...${dossier.visitedDestinations.length} items ],
-  "recommendations": [ ...${dossier.recommendations.length} items ],
+  "visitedDestinations": [ ${(dossier.visitedDestinations || []).length} found ],
+  "recommendations": [ ${(dossier.recommendations || []).length} generated ],
   "generatedAt": "${dossier.generatedAt}"
 }
 
-// TTL: 2592000 s (30 Days Expiry)`}
+// Results saved for 30 days`}
                         </pre>
                       </div>
 
-                      {/* Space 2: Pub/Sub messaging */}
+                      {/* Space 2: Agent workflow */}
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <h5 className="font-semibold text-slate-200 flex items-center gap-2">
                             <Layers className="w-4 h-4 text-cyan-400" />
-                            Pub/Sub messaging orchestration
+                            Agent Workflow
                           </h5>
                           <p className="text-xs text-slate-400">
-                            The triggers are fired non-blocking to Google Cloud Pub/Sub topics. Worker scripts pull and invoke downriver agents sequentially.
+                            Each analysis runs through a 10-step AI agent pipeline. Agents execute sequentially, passing results through shared session state.
                           </p>
                           <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-900 text-xs font-mono">
                             <Compass className="w-4 h-4 text-indigo-400" />
-                            <span>Topic: <code className="text-slate-200">instagram-trigger-analyze</code></span>
+                            <span>Pipeline: <code className="text-slate-200">Google ADK SequentialAgent</code></span>
                           </div>
                         </div>
 
@@ -983,9 +991,9 @@ export default function App() {
                 </div>
 
                 <div className="max-w-sm">
-                  <h4 className="font-display text-xl font-light text-stone-200">Your journey starts with a handle</h4>
+                  <h4 className="font-display text-xl font-light text-stone-200">Discover where they travel next</h4>
                   <p className="text-xs text-stone-500 mt-2 leading-relaxed">
-                    Enter your Instagram handle above, or try an example, and we'll compose tailored itineraries from your travel story.
+                    Enter any creator's Instagram handle above to unlock their travel personality — budget style, favourite destinations, and 5 ready-to-book itineraries crafted just for them.
                   </p>
                 </div>
 

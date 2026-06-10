@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { AgentLog } from "../types";
 import { Sparkles, Layers } from "lucide-react";
 
@@ -20,6 +21,12 @@ const agentLabels: Record<AgentLog['agentName'], string> = {
 };
 
 export default function AgentLiveTerminal({ logs, status }: AgentLiveTerminalProps) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs.length, logs[logs.length - 1]?.id]);
+
   return (
     <div className="flex flex-col h-full bg-white/[0.02] border border-white/[0.06] rounded-3xl overflow-hidden" id="agent-terminal-card">
       <div className="flex items-center px-5 py-4 border-b border-white/[0.06]">
@@ -36,25 +43,28 @@ export default function AgentLiveTerminal({ logs, status }: AgentLiveTerminalPro
             <span className="text-xs text-stone-500 max-w-[180px]">Enter a handle to start crafting your trips.</span>
           </div>
         ) : (
-          logs.map((log) => {
-            const label = agentLabels[log.agentName] || 'System';
-            return (
-              <div
-                key={log.id}
-                className="flex items-start gap-3"
-                id={`terminal-log-${log.id}`}
-              >
-                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-brass-400/60 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-medium text-brass-200/90">{label}</span>
-                    <span className="text-[10px] text-stone-600 font-mono">{log.timestamp}</span>
+          <>
+            {logs.map((log) => {
+              const label = agentLabels[log.agentName] || 'System';
+              return (
+                <div
+                  key={log.id}
+                  className="flex items-start gap-3"
+                  id={`terminal-log-${log.id}`}
+                >
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-brass-400/60 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-medium text-brass-200/90">{label}</span>
+                      <span className="text-[10px] text-stone-600 font-mono">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                    </div>
+                    <p className="text-stone-400 break-words leading-snug mt-0.5">{log.message}</p>
                   </div>
-                  <p className="text-stone-400 break-words leading-snug mt-0.5">{log.message}</p>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+            <div ref={bottomRef} />
+          </>
         )}
       </div>
 
