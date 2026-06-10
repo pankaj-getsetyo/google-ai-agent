@@ -104,6 +104,9 @@ export interface CreatorIntelligenceDossier {
   instagramData: InstagramData;
   structuredContent: StructuredContent;
   visitedDestinations: VisitedDestination[];
+  countriesVisited: string[];
+  travelThemes: string[];
+  travelHighlights: string[];
   travelPersona: TravelPersona;
   recommendations: TravelRecommendation[];
   prompts: ItineraryPrompt[];

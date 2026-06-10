@@ -7,21 +7,20 @@
   --font-serif: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Warm "brass / champagne" accent — replaces the AI cyan/indigo */
-  --color-brass-100: #f6ecd9;
-  --color-brass-200: #ecd9b6;
-  --color-brass-300: #e0c391;
-  --color-brass-400: #cfa867;
-  --color-brass-500: #b88c47;
-  --color-brass-600: #946d35;
+  --color-brand-50: #ededff;
+  --color-brand-100: #dbd8ff;
+  --color-brand-200: #beb4fb;
+  --color-brand-300: #8b7ff8;
+  --color-brand-400: #6358f5;
+  --color-brand-500: #4a3aff;
+  --color-brand-600: #3a2ccc;
+  --color-brand-700: #2d2299;
 
-  /* Muted sage as a quiet secondary */
   --color-sage-300: #b8c2ad;
-  --color-sage-500: #7f8f72;
+  --color-sage-500: #22c55e;
 
-  /* Warm near-black canvas */
-  --color-canvas: #0c0b09;
-  --color-ink: #14120e;
+  --color-canvas: #f5f5f5;
+  --color-ink: #ffffff;
 }
 
 html {
@@ -35,17 +34,15 @@ body {
 }
 
 ::selection {
-  background: rgba(207, 168, 103, 0.25);
-  color: #fff;
+  background: rgba(74, 58, 255, 0.15);
+  color: #1a1a2e;
 }
 
-/* Refined display heading helper */
 .font-display {
   font-family: var(--font-serif);
   letter-spacing: -0.01em;
 }
 
-/* Hairline micro-label */
 .eyebrow {
   font-size: 10px;
   letter-spacing: 0.18em;
@@ -53,7 +50,6 @@ body {
   font-weight: 500;
 }
 
-/* Custom scrolling classes for terminal logs */
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -62,22 +58,16 @@ body {
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #3a352c;
+  background: #d4d4d8;
   border-radius: 2px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #4d473c;
+  background: #a1a1aa;
 }
 
 @keyframes pulse-slow {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(1.05);
-  }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
 }
 
 .animate-pulse-slow {
@@ -93,7 +83,6 @@ body {
   animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Leaflet map — keep pins clean, controls subtle */
 .travel-map-pin {
   background: transparent !important;
   border: none !important;
@@ -118,7 +107,7 @@ body {
 
 .leaflet-popup-content-wrapper {
   border-radius: 12px !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
 }
 
 .leaflet-popup-tip {

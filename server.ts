@@ -37,6 +37,13 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(express.json());
 
+function extractUsername(input: string): string {
+  let clean = input.trim();
+  const urlMatch = clean.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9._]+)/);
+  if (urlMatch) clean = urlMatch[1];
+  return clean.replace(/^@/, "").replace(/\/$/, "").trim();
+}
+
 // --- SECURE LAZY GEMINI CLIENT INITIALIZATION ---
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI | null {
@@ -76,45 +83,80 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
-// --- REDIS-STYLE IN-MEMORY CACHE SCHEMA STORE ---
-type CacheValue = {
-  data: any;
-  expiresAt: number;
-};
-// Toggle the (in-memory) Redis-style cache via the USE_REDIS env var.
-// Default OFF — when disabled, every analysis runs fresh (no cache reads/writes).
+// --- REDIS CACHE ---
+import IORedis from "ioredis";
+
 const USE_REDIS = process.env.USE_REDIS === "true";
 
 class RedisCache {
-  private store: Map<string, CacheValue> = new Map();
+  private client: IORedis | null = null;
+  private fallback: Map<string, { data: any; expiresAt: number }> = new Map();
   private enabled: boolean;
 
   constructor(enabled: boolean) {
     this.enabled = enabled;
-    console.log(`[Redis] Cache ${enabled ? "ENABLED" : "DISABLED"} (set USE_REDIS=true to enable).`);
+    if (enabled && process.env.REDIS_HOST) {
+      this.client = new IORedis({
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT || "6379"),
+        username: process.env.REDIS_USERNAME || "default",
+        password: process.env.REDIS_PASSWORD || undefined,
+        tls: process.env.REDIS_ENABLE_SSL === "true" ? {} : undefined,
+        maxRetriesPerRequest: 3,
+        retryStrategy: (times) => times > 1 ? null : 2000,
+        lazyConnect: true,
+      });
+      this.client.on("error", () => {});
+      this.client.connect()
+        .then(() => console.log("[Redis] Connected to Redis."))
+        .catch(() => {
+          console.log("[Redis] Could not reach Redis, using in-memory fallback.");
+          if (this.client) { this.client.disconnect(); this.client = null; }
+        });
+    } else if (enabled) {
+      console.log("[Redis] REDIS_HOST not set. Using in-memory fallback.");
+    } else {
+      console.log("[Redis] Cache DISABLED.");
+    }
   }
 
-  get(key: string): any | null {
+  async get(key: string): Promise<any | null> {
     if (!this.enabled) return null;
-    const entry = this.store.get(key);
-    if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
-      console.log(`[Redis] Key expired with TTL: ${key}`);
-      this.store.delete(key);
-      return null;
+    if (this.client) {
+      try {
+        const val = await this.client.get(key);
+        if (!val) return null;
+        return JSON.parse(val);
+      } catch (err) {
+        console.error("[Redis] Get error:", err);
+        return null;
+      }
     }
+    const entry = this.fallback.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) { this.fallback.delete(key); return null; }
     return entry.data;
   }
 
-  set(key: string, value: any, ttlSeconds: number = 2592000): void {
+  async set(key: string, value: any, ttlSeconds: number = 2592000): Promise<void> {
     if (!this.enabled) return;
-    const expiresAt = Date.now() + (ttlSeconds * 1000);
-    this.store.set(key, { data: value, expiresAt });
-    console.log(`[Redis] Saved key: ${key} with TTL: ${ttlSeconds}s`);
+    if (this.client) {
+      try {
+        await this.client.set(key, JSON.stringify(value), "EX", ttlSeconds);
+      } catch (err) {
+        console.error("[Redis] Set error:", err);
+      }
+      return;
+    }
+    this.fallback.set(key, { data: value, expiresAt: Date.now() + (ttlSeconds * 1000) });
   }
 
-  delete(key: string): void {
-    this.store.delete(key);
+  async delete(key: string): Promise<void> {
+    if (this.client) {
+      try { await this.client.del(key); } catch {}
+      return;
+    }
+    this.fallback.delete(key);
   }
 }
 
@@ -260,7 +302,7 @@ async function scrapeInstagramProfile(
     throw new Error("Unable to read Instagram profiles right now. Please try again later.");
   }
 
-  const cleanUsername = username.replace(/^@/, "").trim();
+  const cleanUsername = extractUsername(username);
   const client = new ApifyClient({ token });
 
   const detailsInput = {
@@ -477,7 +519,10 @@ const detectionAgent = new TaskAgent({
       Based strictly on the real biography, captions, hashtags, mentions and locations above, produce a travel
       intelligence analysis:
       - Identify ALL visited destinations actually evidenced in the real content — there is no limit, include every destination you can find evidence for (with visitCount, source evidence quoting/paraphrasing the real captions or locations, and confidence). If the real content has little travel signal, infer conservatively and lower the confidence.
+      - List all unique countries visited as an array of strings.
       - Define travel persona: budgetProfile ('Budget', 'Mid-range', or 'Luxury'), travelStyle ('Relaxed', 'Adventure', 'Immersive', or 'Fast-paced'), travellerType ('Solo', 'Couple', 'Group', 'Family'), activityPreferences, travelFrequency ('High', 'Medium', 'Low').
+      - Identify the top travel themes evident in the content (e.g., "Beach & Islands", "Mountains & Trekking", "Cultural Heritage", "Food & Culinary", "Wildlife & Nature", "Urban Exploration", "Spiritual & Wellness", "Road Trips", "Nightlife & Parties", "Photography & Art").
+      - Write 2-3 short travel highlights — memorable moments or patterns from the content (e.g., "Explored 3 countries in Southeast Asia in one month", "Frequently visits offbeat hill stations").
       - Generate exactly 5 targeted recommendations with category: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'. Give a detailed score (0 to 100) and reasoning grounded in the real content for each.
       - Formulate 5 custom travel prompts for the GetSetYo Itinerary API (one per recommendation).
       - Plot coordinate positions (latitude and longitude as numbers) for each visited and recommended destination.
@@ -487,6 +532,9 @@ const detectionAgent = new TaskAgent({
         "visitedDestinations": [
           { "destination": "Bali", "country": "Indonesia", "visitCount": 3, "confidence": 0.95, "sources": ["caption"], "evidence": "string", "timeline": "2024-05" }
         ],
+        "countriesVisited": ["Indonesia", "India", "Thailand"],
+        "travelThemes": ["Beach & Islands", "Cultural Heritage"],
+        "travelHighlights": ["Explored Southeast Asia extensively", "Frequent visitor to Himalayan destinations"],
         "travelPersona": { "budgetProfile": "Luxury", "travelStyle": "Relaxed", "travellerType": "Couple", "activityPreferences": ["string"], "travelFrequency": "High", "confidence": 0.88, "hotelPreference": "string", "foodPreference": "string", "summary": "string" },
         "recommendations": [
           { "destination": "Maldives", "country": "Maldives", "category": "Similar Destination", "score": 95, "reason": "string" }
@@ -578,8 +626,15 @@ const detectionAgent = new TaskAgent({
 
     log(`Identified ${visitedDestinations.length} destinations this creator has visited.`);
 
+    const countriesVisited: string[] = parsed.countriesVisited || [...new Set(visitedDestinations.map(v => v.country))];
+    const travelThemes: string[] = parsed.travelThemes || [];
+    const travelHighlights: string[] = parsed.travelHighlights || [];
+
     return {
       visited_destinations: visitedDestinations,
+      countries_visited: countriesVisited,
+      travel_themes: travelThemes,
+      travel_highlights: travelHighlights,
       travel_persona: travelPersona,
       ai_recommendations: recommendations,
       ai_prompts: prompts,
@@ -640,15 +695,13 @@ const itineraryAgent = new TaskAgent({
 
     const shouldGenerate = state._generateItinerary !== undefined ? state._generateItinerary : GENERATE_ITINERARY;
     if (!shouldGenerate) {
-      log(`Preparing ${recommendations.length} trip itineraries...`);
+      log(`${recommendations.length} destinations ready. You can generate itineraries individually.`);
       const itineraries: GetSetYoItinerary[] = recommendations.map(r => ({
         destination: r.destination,
         packageDealId: 0,
-        status: 'COMPLETED' as const,
+        status: 'PENDING' as const,
         productUrl: ''
       }));
-      itineraries.forEach(it => log(`${it.destination} itinerary ready.`));
-      log(`All ${itineraries.length} trips are ready to explore.`);
       return { generated_itineraries: itineraries };
     }
 
@@ -790,6 +843,9 @@ const aggregatorAgent = new TaskAgent({
         locations: (state.visited_destinations as VisitedDestination[]).map(v => v.destination)
       },
       visitedDestinations: state.visited_destinations,
+      countriesVisited: state.countries_visited || [],
+      travelThemes: state.travel_themes || [],
+      travelHighlights: state.travel_highlights || [],
       travelPersona: state.travel_persona,
       recommendations: state.ai_recommendations,
       prompts: state.ai_prompts,
@@ -798,8 +854,8 @@ const aggregatorAgent = new TaskAgent({
       generatedAt: new Date().toISOString()
     };
 
-    redis.set(`creator-analysis:${state.username}`, finalDossier, 2592000);
-    redis.set(`creator-itineraries:${state.username}`, { itineraries: finalDossier.generatedItineraries }, 2592000);
+    await redis.set(`creator-analysis:${state.username}`, finalDossier, 2592000);
+    await redis.set(`creator-itineraries:${state.username}`, { itineraries: finalDossier.generatedItineraries }, 2592000);
 
     state.final_dossier = finalDossier;
     log(`Your travel profile is ready!`);
@@ -844,6 +900,9 @@ function buildPartialDossier(state: Record<string, any>): Partial<CreatorIntelli
       locations: state.visited_destinations ? (state.visited_destinations as VisitedDestination[]).map(v => v.destination) : (state.structured_locations || [])
     },
     visitedDestinations: state.visited_destinations || [],
+    countriesVisited: state.countries_visited || [],
+    travelThemes: state.travel_themes || [],
+    travelHighlights: state.travel_highlights || [],
     travelPersona: state.travel_persona || undefined as any,
     recommendations: state.ai_recommendations || [],
     prompts: state.ai_prompts || [],
@@ -951,23 +1010,23 @@ async function fetchItineraryDetails(packageDealId: number | string): Promise<Pa
 // --- FULL-STACK API ROUTINGS ---
 
 // POST trigger analysis
-app.post("/api/analyze", (req, res) => {
+app.post("/api/analyze", async (req, res) => {
   const { username, forceRefresh, generateItinerary: genItinParam } = req.body;
   if (!username || username.trim() === "") {
     return res.status(400).json({ error: "username parameter is required" });
   }
 
-  const cleanUsername = username.trim().replace(/^@/, "");
+  const cleanUsername = extractUsername(username);
   const shouldGenerateItinerary = genItinParam !== undefined ? genItinParam : GENERATE_ITINERARY;
 
   if (forceRefresh) {
-    redis.delete(`creator-analysis:${cleanUsername}`);
-    redis.delete(`creator-itineraries:${cleanUsername}`);
+    await redis.delete(`creator-analysis:${cleanUsername}`);
+    await redis.delete(`creator-itineraries:${cleanUsername}`);
     activeJobs.delete(cleanUsername);
   }
 
   // Check Redis Cache
-  const cachedDossier = redis.get(`creator-analysis:${cleanUsername}`);
+  const cachedDossier = await redis.get(`creator-analysis:${cleanUsername}`);
   if (cachedDossier) {
     console.log(`[Cache Hit] Serving analysis dossier for @${cleanUsername} from simulated Redis Store.`);
     return res.json({
@@ -1013,16 +1072,16 @@ app.post("/api/analyze", (req, res) => {
 });
 
 // GET analysis status polling endpoint
-app.get("/api/analysis-status", (req, res) => {
+app.get("/api/analysis-status", async (req, res) => {
   const { username } = req.query;
   if (!username) {
     return res.status(400).json({ error: "username query matches required metadata" });
   }
 
-  const cleanUsername = (username as string).trim().replace(/^@/, "");
+  const cleanUsername = extractUsername(username as string);
 
   // 1. Is there a complete cache record?
-  const cachedDossier = redis.get(`creator-analysis:${cleanUsername}`);
+  const cachedDossier = await redis.get(`creator-analysis:${cleanUsername}`);
   if (cachedDossier) {
     return res.json({
       status: 'completed',
@@ -1045,6 +1104,132 @@ app.get("/api/analysis-status", (req, res) => {
   res.status(404).json({ error: "No active analysis found. Start a new trigger request." });
 });
 
+// POST generate a single itinerary on demand
+app.post("/api/generate-itinerary", async (req, res) => {
+  const { username, destination } = req.body;
+  if (!username || !destination) return res.status(400).json({ error: "username and destination required" });
+
+  const cleanUsername = extractUsername(username);
+  const cachedDossier = await redis.get(`creator-analysis:${cleanUsername}`);
+  const dossier = cachedDossier || (activeJobs.get(cleanUsername)?.dossier as any);
+  if (!dossier) return res.status(404).json({ error: "No analysis found. Run analysis first." });
+
+  const recommendations: TravelRecommendation[] = dossier.recommendations || [];
+  const prompts: ItineraryPrompt[] = dossier.prompts || [];
+  const rec = recommendations.find(r => r.destination === destination);
+  if (!rec) return res.status(404).json({ error: "Destination not found in recommendations." });
+
+  const customPrompt = prompts.find(p => p.destination === destination);
+  const promptString = customPrompt ? customPrompt.prompt : `Generate a beautiful 5-day itinerary focused on ${destination}.`;
+
+  try {
+    const getsetyoApiUrl = "https://www.getsetyo.club/itinerary/generate-ai-itinerary";
+    const getsetyoJwt = process.env.GETSETYO_JWT_TOKEN || "";
+    const getsetyoSession = process.env.GETSETYO_LOGIN_SESSION_TOKEN || "";
+    const getsetyoCookie = `device-id-new=1bbf23a0-f0c0-4b49-9c8b-d5e9718f225e; _fbp=fb.1.1778495407282.712203300242907940; external-id=0paK5RxO; login-session-token=${getsetyoSession}; jwt=${getsetyoJwt}`;
+
+    const requestBody = {
+      requirement: {
+        startDate: "2026-08-09",
+        paxDetails: { adultCount: 2, childCount: 0, roomCount: 1, childAges: [] },
+        departureCity: { objectID: 20231, name: "Bengaluru" }
+      },
+      templateCode: "STEP1,STEP2,STEP3",
+      aiPrompt: {
+        model: "CHATGPT", templateGroup: null, templateCode: "STEP1,STEP2,STEP3",
+        replaceVariables: { user_prompt: promptString }
+      },
+      itineraryExternalId: null
+    };
+
+    const baseHeaders: any = {
+      "accept": "application/hal+json", "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+      "content-type": "application/json", "origin": "https://www.getsetyo.club",
+      "referer": "https://www.getsetyo.club/dashboard/itinerary/builder?activeTab=with-ai",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    };
+    if (getsetyoJwt) baseHeaders["Authorization"] = `Bearer ${getsetyoJwt}`;
+
+    const { resData } = await fetchGetSetYo(getsetyoApiUrl, baseHeaders, JSON.stringify(requestBody), getsetyoCookie);
+
+    let packageDealId: string | number | null = null;
+    if (resData) {
+      packageDealId = resData.packageDealId || resData.dealId || resData.itineraryId || resData.tripId || resData.id ||
+        resData.itineraryExternalId || resData.externalId || resData.slug ||
+        (resData.data && (resData.data.id || resData.data.itineraryId || resData.data.dealId || resData.data.packageDealId || resData.data.slug)) ||
+        (resData.trip && (resData.trip.id || resData.trip.itineraryId || resData.trip.slug || resData.trip.externalId)) ||
+        (resData.requirement && resData.requirement.itineraryExternalId);
+    }
+
+    if (!packageDealId) return res.json({ status: 'FAILED', destination, packageDealId: 0, productUrl: '' });
+
+    const productUrl = isNaN(Number(packageDealId))
+      ? `https://www.getsetyo.club/trip/details/${packageDealId}`
+      : `https://getsetyo.com/product/${packageDealId}`;
+
+    const itinerary: GetSetYoItinerary = { destination, packageDealId, status: 'COMPLETED', productUrl };
+
+    // Update the cached dossier with the new itinerary
+    if (dossier.generatedItineraries) {
+      const idx = dossier.generatedItineraries.findIndex((it: any) => it.destination === destination);
+      if (idx >= 0) dossier.generatedItineraries[idx] = itinerary;
+    }
+    if (cachedDossier) await redis.set(`creator-analysis:${cleanUsername}`, dossier, 2592000);
+
+    res.json(itinerary);
+  } catch (err: any) {
+    res.json({ status: 'FAILED', destination, packageDealId: 0, productUrl: '' });
+  }
+});
+
+// POST create shareable profile link
+app.post("/api/share-profile", async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: "username required" });
+
+  const cleanUsername = extractUsername(username);
+  const cachedDossier = await redis.get(`creator-analysis:${cleanUsername}`);
+  const dossier = cachedDossier || (activeJobs.get(cleanUsername)?.dossier as any);
+  if (!dossier) return res.status(404).json({ error: "No analysis found. Run analysis first." });
+
+  const existingToken = await redis.get(`share-token:${cleanUsername}`);
+  if (existingToken) {
+    return res.json({ token: existingToken, url: `/profile/${cleanUsername}?token=${existingToken}` });
+  }
+
+  const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+  await redis.set(`share-token:${cleanUsername}`, token, 2592000);
+  await redis.set(`shared-profile:${token}`, { username: cleanUsername, dossier }, 2592000);
+
+  res.json({ token, url: `/profile/${cleanUsername}?token=${token}` });
+});
+
+// GET shared profile data
+const FEATURED_USERNAMES = ['tanyakhanijow', 'brindasharma', 'ilunarang'];
+
+app.get("/api/shared-profile/:username", async (req, res) => {
+  const { username } = req.params;
+  const { token } = req.query;
+  if (!token) return res.status(401).json({ error: "Access denied" });
+
+  const cleanUsername = extractUsername(username);
+
+  if (token === 'featured' && FEATURED_USERNAMES.includes(cleanUsername)) {
+    const cachedDossier = await redis.get(`creator-analysis:${cleanUsername}`);
+    const dossier = cachedDossier || (activeJobs.get(cleanUsername)?.dossier as any);
+    if (dossier) return res.json({ username: cleanUsername, dossier });
+    return res.status(404).json({ error: "This profile is still being generated. Please try again in a moment." });
+  }
+
+  const storedToken = await redis.get(`share-token:${cleanUsername}`);
+  if (!storedToken || storedToken !== token) return res.status(403).json({ error: "Invalid or expired link" });
+
+  const sharedData = await redis.get(`shared-profile:${storedToken}`);
+  if (!sharedData) return res.status(404).json({ error: "Profile not found or expired" });
+
+  res.json(sharedData);
+});
+
 // GET manual Redis check panel (useful for monitoring delivery specs)
 app.get("/api/admin/redis-cache", (req, res) => {
   res.json({
@@ -1059,8 +1244,8 @@ app.get("/api/itinerary-details", async (req, res) => {
   const { username } = req.query;
   if (!username) return res.status(400).json({ error: "username required" });
 
-  const cleanUsername = (username as string).trim().replace(/^@/, "");
-  const cachedDossier = redis.get(`creator-analysis:${cleanUsername}`);
+  const cleanUsername = extractUsername(username as string);
+  const cachedDossier = await redis.get(`creator-analysis:${cleanUsername}`);
   const dossier = cachedDossier || activeJobs.get(cleanUsername)?.dossier;
   if (!dossier) return res.status(404).json({ error: "No analysis found" });
 

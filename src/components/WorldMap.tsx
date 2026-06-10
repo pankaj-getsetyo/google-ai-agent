@@ -13,10 +13,10 @@ interface WorldMapProps {
 function createPinIcon(type: "visited" | "recommended", isActive: boolean): L.DivIcon {
   const isVisited = type === "visited";
   const bg = isActive
-    ? isVisited ? "#cfa867" : "#7f8f72"
-    : isVisited ? "#14120e" : "#14120e";
-  const border = isVisited ? "#cfa867" : "#7f8f72";
-  const inner = isActive ? "#14120e" : isVisited ? "#cfa867" : "#7f8f72";
+    ? isVisited ? "#4a3aff" : "#22c55e"
+    : isVisited ? "#ffffff" : "#ffffff";
+  const border = isVisited ? "#4a3aff" : "#22c55e";
+  const inner = isActive ? "#ffffff" : isVisited ? "#4a3aff" : "#22c55e";
 
   return L.divIcon({
     className: "travel-map-pin",
@@ -144,29 +144,29 @@ export default function WorldMap({ locations, activeLocation, onSelectLocation }
 
   return (
     <div
-      className="flex flex-col h-full bg-white/[0.02] rounded-3xl border border-white/[0.06] p-5 overflow-hidden relative"
+      className="flex flex-col h-full bg-white rounded-3xl border border-stone-200 p-5 overflow-hidden relative shadow-sm"
       id="world-map-wrapper"
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2.5">
-          <Globe className="w-5 h-5 text-brass-300" strokeWidth={1.5} />
-          <h3 className="font-display text-lg font-light text-stone-100 tracking-tight">Your travel map</h3>
+          <Globe className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
+          <h3 className="font-display text-lg font-light text-stone-800 tracking-tight">Your travel map</h3>
         </div>
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-brass-400" />
-            <span className="text-stone-400">Visited</span>
+            <span className="w-2 h-2 rounded-full bg-brand-500" />
+            <span className="text-stone-500">Visited</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-sage-500" />
-            <span className="text-stone-400">Suggested</span>
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-stone-500">Suggested</span>
           </div>
         </div>
       </div>
 
       <div
         ref={mapContainerRef}
-        className="flex-1 w-full min-h-[360px] md:min-h-[420px] rounded-2xl overflow-hidden border border-white/[0.06] z-0"
+        className="flex-1 w-full min-h-[360px] md:min-h-[420px] rounded-2xl overflow-hidden border border-stone-200 z-0"
         id="world-map-canvas-container"
       />
     </div>
