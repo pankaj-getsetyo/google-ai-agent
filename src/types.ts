@@ -73,10 +73,6 @@ export interface GetSetYoItinerary {
   packageDealId: number | string;
   status: 'PENDING' | 'GENERATING' | 'POLLED' | 'COMPLETED' | 'FAILED';
   productUrl: string;
-  durationDays: number;
-  highlights: string[];
-  hotels: string[];
-  estimatedCost: string;
 }
 
 export interface MapCoordinates {

@@ -1,10 +1,56 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@300;400;500;600;700&display=swap');
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Warm "brass / champagne" accent — replaces the AI cyan/indigo */
+  --color-brass-100: #f6ecd9;
+  --color-brass-200: #ecd9b6;
+  --color-brass-300: #e0c391;
+  --color-brass-400: #cfa867;
+  --color-brass-500: #b88c47;
+  --color-brass-600: #946d35;
+
+  /* Muted sage as a quiet secondary */
+  --color-sage-300: #b8c2ad;
+  --color-sage-500: #7f8f72;
+
+  /* Warm near-black canvas */
+  --color-canvas: #0c0b09;
+  --color-ink: #14120e;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(207, 168, 103, 0.25);
+  color: #fff;
+}
+
+/* Refined display heading helper */
+.font-display {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+}
+
+/* Hairline micro-label */
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
 }
 
 /* Custom scrolling classes for terminal logs */
@@ -16,11 +62,11 @@
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #3a352c;
   border-radius: 2px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #4d473c;
 }
 
 @keyframes pulse-slow {
@@ -36,4 +82,45 @@
 
 .animate-pulse-slow {
   animation: pulse-slow 3s infinite ease-in-out;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-rise {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Leaflet map — keep pins clean, controls subtle */
+.travel-map-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: #e8e4dc;
+}
+
+.leaflet-control-zoom a {
+  color: #44403c !important;
+  background: #fafaf9 !important;
+  border-color: #e7e5e4 !important;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  color: #78716c !important;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+.leaflet-popup-tip {
+  box-shadow: none !important;
 }

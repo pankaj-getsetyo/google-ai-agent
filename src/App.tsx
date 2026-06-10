@@ -30,13 +30,18 @@ import WorldMap from "./components/WorldMap";
 import AgentLiveTerminal from "./components/AgentLiveTerminal";
 
 const SHOWCASE_CREATORS = [
-  { username: "luxury.explorer", label: "💎 Luxury Curator", hint: "Alex Thorne" },
-  { username: "backpacker.sam", label: "🎒 Budget Backpacking", hint: "Sam Miller" },
-  { username: "couple.escapes", label: "👩‍❤️‍👨 Romantic Escape", hint: "The Millers" }
+  { username: "wanderwithsky", label: "🏔️ Adventure & Peaks", hint: "Aakash" },
+  { username: "btwitsnaman", label: "🌏 Travel Creator", hint: "Naman" },
+  { username: "doyoutravel", label: "📸 Wanderlust", hint: "Jack Morris" }
 ];
 
+// Internal/debug surface (Agent Trace tab, Tech Specs tab, infra telemetry,
+// confidence scores, match scores, deal IDs) is hidden from end users by default.
+// Enable it by setting VITE_DEBUG_MODE="true" in the environment.
+const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE === "true";
+
 export default function App() {
-  const [username, setUsername] = useState("luxury.explorer");
+  const [username, setUsername] = useState("wanderwithsky");
   const [status, setStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<AgentLog[]>([]);
@@ -144,74 +149,76 @@ export default function App() {
   }, [dossier]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col relative" id="app-root">
-      
-      {/* Visual Ambient Glows */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none select-none" />
-      <div className="absolute top-[400px] right-10 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none select-none" />
-      
-      {/* Header Deck */}
-      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur sticky top-0 z-50 px-4 md:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="absolute -inset-1 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 opacity-60 blur animate-pulse" />
-            <div className="relative bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-              <Compass className="w-6 h-6 text-cyan-400" />
-            </div>
+    <div className="min-h-screen bg-canvas text-stone-200 font-sans flex flex-col relative selection:bg-brass-400/25" id="app-root">
+
+      {/* Header */}
+      <header className="border-b border-white/[0.06] bg-canvas/80 backdrop-blur-xl sticky top-0 z-50 px-5 md:px-10 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="flex items-center justify-center w-10 h-10 rounded-full border border-brass-400/40 bg-brass-400/[0.07]">
+            <Compass className="w-5 h-5 text-brass-300" strokeWidth={1.5} />
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-              Creator Travel Intelligence
-              <span className="text-[10px] uppercase tracking-widest font-mono font-normal bg-cyan-950 text-cyan-400 border border-cyan-800/50 px-2 py-0.5 rounded">
-                Platform v2.5
-              </span>
+            <h1 className="font-display text-lg font-medium text-stone-50 leading-none">
+              GetSetYo
             </h1>
-            <p className="text-xs text-slate-400 tracking-tight">Google ADK Multi-Agent Synthesis Engine</p>
+            <p className="text-[11px] text-stone-400 tracking-wide mt-1">AI Travel Concierge</p>
           </div>
         </div>
 
-        {/* Live status telemetry */}
-        <div className="flex items-center gap-3 text-xs font-mono">
-          <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2 text-slate-400">
-            <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Memory Cache: <span className="text-emerald-400 font-semibold">Active</span></span>
-          </div>
-          <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2 text-slate-400">
-            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-            <span>LLM: <span className="text-white">Gemini 3.5 Flash</span></span>
-          </div>
+        <div className="flex items-center gap-5">
+          {/* Live status telemetry (internal/debug only) */}
+          {DEBUG_MODE && (
+            <div className="flex items-center gap-2.5 text-[11px] font-mono">
+              <div className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] flex items-center gap-2 text-stone-400">
+                <Database className="w-3.5 h-3.5 text-sage-300" />
+                <span>Cache: <span className="text-sage-300 font-semibold">Active</span></span>
+              </div>
+              <div className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] flex items-center gap-2 text-stone-400">
+                <Cpu className="w-3.5 h-3.5 text-brass-300" />
+                <span>LLM: <span className="text-stone-100">Gemini 3.5 Flash</span></span>
+              </div>
+            </div>
+          )}
+          <span className="hidden sm:flex items-center gap-2 text-[11px] text-stone-400 tracking-wide">
+            <span className="w-1.5 h-1.5 rounded-full bg-sage-500" />
+            Powered by GetSetYo
+          </span>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6" id="dashboard-layout">
         
-        {/* Step 1 input trigger block */}
-        <section className="bg-slate-900/40 backdrop-blur-sm border border-slate-900 rounded-2xl p-6 flex flex-col gap-4 relative" id="trigger-section">
-          <div className="absolute top-2 right-3 flex items-center gap-1.5 text-xs font-mono text-slate-500 select-none">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>AGENT LISTENER: ACTIVE</span>
-          </div>
-
-          <div className="max-w-xl">
-            <h2 className="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-1">Analyze Creator Footprints</h2>
-            <p className="text-xs text-slate-400">
-              Accepts a public Instagram handle and automatically extracts the profile, analyzes the latest 100 posts, reels, bios, and maps travel intelligence.
+        {/* Hero + input */}
+        <section className="flex flex-col items-center text-center gap-7 pt-8 pb-4 md:pt-14 md:pb-8" id="trigger-section">
+          <div className="max-w-2xl flex flex-col items-center gap-4">
+            <span className="eyebrow text-brass-300 flex items-center gap-2">
+              <span className="w-6 h-px bg-brass-400/50" />
+              Personal travel intelligence
+              <span className="w-6 h-px bg-brass-400/50" />
+            </span>
+            <h2 className="font-display text-4xl md:text-5xl font-light text-stone-50 leading-[1.08]">
+              Your Instagram, turned into a
+              <span className="italic text-brass-300"> bespoke journey</span>
+            </h2>
+            <p className="text-sm md:text-[15px] text-stone-400 leading-relaxed max-w-xl">
+              Enter your public Instagram handle. We read your travel story and craft tailored,
+              ready-to-book itineraries made just for you.
             </p>
           </div>
 
-          {/* Form Trigger Row */}
-          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+          {/* Input row */}
+          <div className="w-full max-w-xl flex flex-col sm:flex-row gap-3 items-stretch">
             <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400">
-                <Instagram className="w-5 h-5 text-indigo-400" />
+              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-stone-500">
+                <Instagram className="w-5 h-5" strokeWidth={1.5} />
               </div>
               <input
                 type="text"
-                placeholder="public_instagram_username"
+                placeholder="your_instagram_handle"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={status === 'running'}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
+                className="w-full bg-white/[0.03] border border-white/10 rounded-full py-3.5 pl-12 pr-4 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-brass-400/60 focus:bg-white/[0.05] transition-all"
                 id="creator-username-input"
               />
             </div>
@@ -219,49 +226,48 @@ export default function App() {
             <button
               onClick={() => handleAnalyze()}
               disabled={status === 'running' || !username.trim()}
-              className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-medium text-sm transition-all duration-300 ${
+              className={`flex items-center justify-center gap-2 px-7 py-3.5 rounded-full font-medium text-sm transition-all duration-300 whitespace-nowrap ${
                 status === 'running'
-                  ? 'bg-cyan-950 text-cyan-500 border border-cyan-800 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white shadow-lg active:scale-98 cursor-pointer'
+                  ? 'bg-brass-400/10 text-brass-300/70 border border-brass-400/20 cursor-not-allowed'
+                  : 'bg-brass-400 text-stone-950 hover:bg-brass-300 shadow-lg shadow-brass-500/10 active:scale-[0.98] cursor-pointer'
               }`}
               id="analyze-submit-button"
             >
               {status === 'running' ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Synthesizing ({progress}%)</span>
+                  <span>Crafting ({progress}%)</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>Analyze Instagram Handle</span>
+                  <Sparkles className="w-4 h-4" strokeWidth={1.75} />
+                  <span>Plan my trips</span>
                 </>
               )}
             </button>
           </div>
 
           {/* Showcase Preset Triggers */}
-          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-900/50">
-            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mr-2">Try Showcase Creators:</span>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <span className="text-[11px] text-stone-500 mr-1">Try an example</span>
             {SHOWCASE_CREATORS.map((c) => (
               <button
                 key={c.username}
                 onClick={() => handleShowcaseSelect(c.username)}
                 disabled={status === 'running'}
-                className={`text-xs px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${
-                  username === c.username 
-                    ? 'bg-slate-900 border-cyan-500/50 text-cyan-300 font-medium' 
-                    : 'bg-slate-950/60 border-slate-900 text-slate-400 hover:text-slate-200'
+                className={`text-xs px-3.5 py-1.5 rounded-full border transition-all flex items-center gap-1.5 ${
+                  username === c.username
+                    ? 'bg-brass-400/10 border-brass-400/40 text-brass-200'
+                    : 'bg-white/[0.02] border-white/[0.08] text-stone-400 hover:text-stone-200 hover:border-white/15'
                 }`}
               >
                 <span>{c.label}</span>
-                <span className="text-[10px] font-mono text-slate-500">@{c.username}</span>
               </button>
             ))}
           </div>
 
           {errorText && (
-            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3.5 rounded-xl text-xs flex items-center gap-2.5 animate-pulse">
+            <div className="w-full max-w-xl bg-red-500/[0.07] border border-red-500/20 text-red-300 p-3.5 rounded-2xl text-xs flex items-center gap-2.5">
               <AlertCircle className="w-4.5 h-4.5 shrink-0" />
               <span>{errorText}</span>
             </div>
@@ -274,36 +280,6 @@ export default function App() {
           {/* Left panel: Swarm execution logs always visible if triggered */}
           <div className="lg:col-span-1 flex flex-col gap-6">
             <AgentLiveTerminal logs={logs} status={status} />
-            
-            {/* Swarm Architecture Summary panel */}
-            <div className="bg-slate-900/30 border border-slate-900 p-5 rounded-2xl flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4.5 h-4.5 text-indigo-400" />
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-200">Downstream Pipeline Specs</h3>
-              </div>
-              <p className="text-xs text-slate-400 leading-normal">
-                This platform utilizes the **Planner Agent orchestration architecture**. It automatically routes the Instagram handle through 10 isolated AI actors to structure content, profile styles, and poll status indicators from GetSetYo Itinerary engine.
-              </p>
-              
-              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono mt-1">
-                <div className="p-2 bg-slate-950 rounded border border-slate-900 flex flex-col">
-                  <span className="text-slate-500">Analysis Items</span>
-                  <span className="text-slate-300 font-semibold text-xs mt-0.5">Bio + 100 Posts</span>
-                </div>
-                <div className="p-2 bg-slate-950 rounded border border-slate-900 flex flex-col">
-                  <span className="text-slate-500">Reels inclusion</span>
-                  <span className="text-emerald-400 font-semibold text-xs mt-0.5">TRUE</span>
-                </div>
-                <div className="p-2 bg-slate-950 rounded border border-slate-900 flex flex-col">
-                  <span className="text-slate-500">Stories Crawling</span>
-                  <span className="text-rose-400 font-semibold text-xs mt-0.5">DISABLED</span>
-                </div>
-                <div className="p-2 bg-slate-950 rounded border border-slate-900 flex flex-col">
-                  <span className="text-slate-500">Dossier TTL</span>
-                  <span className="text-slate-300 font-semibold text-xs mt-0.5">30 Days</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Right/Major panels: Results view */}
@@ -312,158 +288,123 @@ export default function App() {
               <div className="flex flex-col gap-6 h-full">
                 
                 {/* Result Control Tab deck */}
-                <div className="flex flex-wrap items-center justify-between border-b border-slate-900 pb-2 gap-4">
+                <div className="flex flex-col gap-5 animate-rise">
                   <div className="flex items-center gap-4">
-                    <img 
-                      src={dossier.creatorProfile.profilePicUrl} 
-                      alt="creator" 
-                      onClick={() => console.log('creator_dossier', dossier)}
+                    <img
+                      src={dossier.creatorProfile.profilePicUrl}
+                      alt={dossier.creatorProfile.fullName}
                       referrerPolicy="no-referrer"
-                      className="w-10 h-10 rounded-full object-cover border-2 border-slate-800"
+                      className="w-14 h-14 rounded-full object-cover ring-1 ring-white/10"
                     />
                     <div>
-                      <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <h3 className="font-display text-xl font-medium text-stone-50 leading-tight">
                         {dossier.creatorProfile.fullName}
-                        <span className="text-xs text-slate-400 font-normal">@{dossier.instagramUsername}</span>
                       </h3>
-                      <div className="flex items-center gap-3 text-xs text-slate-500 font-mono mt-0.5">
-                        <span>👥 {dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
-                        <span>•</span>
-                        <span>🎯 Confidence {Math.round(dossier.travelPersona.confidence * 100)}%</span>
+                      <div className="flex items-center gap-2.5 text-xs text-stone-500 mt-1">
+                        <span className="text-stone-400">@{dossier.instagramUsername}</span>
+                        <span className="w-1 h-1 rounded-full bg-stone-700" />
+                        <span>{dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
+                        {DEBUG_MODE && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-stone-700" />
+                            <span>Confidence {Math.round(dossier.travelPersona.confidence * 100)}%</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-1 bg-slate-950 p-1.5 rounded-xl border border-slate-900">
-                    <button
-                      onClick={() => setActiveTab('persona')}
-                      className={`text-xs px-3.5 py-2 rounded-lg transition-all ${
-                        activeTab === 'persona' ? 'bg-indigo-600 text-white font-medium shadow-md' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Persona
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('history')}
-                      className={`text-xs px-3.5 py-2 rounded-lg transition-all ${
-                        activeTab === 'history' ? 'bg-indigo-600 text-white font-medium shadow-md' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Visited
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('map')}
-                      className={`text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
-                        activeTab === 'map' ? 'bg-indigo-600 text-white font-medium shadow-md' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Map
-                      <span className="text-[9px] bg-slate-900 text-emerald-400 px-1.5 rounded border border-slate-800">GIS</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('itineraries')}
-                      className={`text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1 ${
-                        activeTab === 'itineraries' ? 'bg-indigo-600 text-white font-medium shadow-md' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Itineraries
-                      <span className="text-[9px] bg-slate-900 text-cyan-400 px-1.5 rounded border border-slate-800 font-mono">
-                        {dossier.generatedItineraries.filter(i => i.status === 'COMPLETED').length}/5
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('agentSwarm')}
-                      className={`text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1 ${
-                        activeTab === 'agentSwarm' ? 'bg-indigo-600 text-white font-medium shadow-md' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Agent Trace
-                      <span className="text-[9px] bg-slate-900 text-emerald-400 px-1.5 rounded border border-slate-800 font-mono">10/10</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('architecture')}
-                      className={`text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1 ${
-                        activeTab === 'architecture' ? 'bg-slate-900 text-cyan-400 border border-slate-800' : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Tech Specs
-                    </button>
+                  <div className="flex flex-wrap gap-1 border-b border-white/[0.06] pb-px">
+                    {([
+                      { key: 'persona', label: 'Trip Style' },
+                      { key: 'history', label: 'Places Visited' },
+                      { key: 'map', label: 'Map' },
+                      { key: 'itineraries', label: `Itineraries (${dossier.generatedItineraries.filter(i => i.status === 'COMPLETED').length})` },
+                      ...(DEBUG_MODE ? [{ key: 'agentSwarm', label: 'Agent Trace' }, { key: 'architecture', label: 'Tech Specs' }] : [])
+                    ] as { key: typeof activeTab; label: string }[]).map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`relative text-sm px-4 py-2.5 transition-colors ${
+                          activeTab === tab.key ? 'text-stone-50' : 'text-stone-500 hover:text-stone-300'
+                        }`}
+                      >
+                        {tab.label}
+                        {activeTab === tab.key && (
+                          <span className="absolute left-3 right-3 -bottom-px h-px bg-brass-400" />
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 {/* TAB CONTENT 1: TRAVEL PERSONA */}
                 {activeTab === 'persona' && (
-                  <div className="space-y-6" id="tab-persona">
-                    <div className="bg-slate-900/20 rounded-2xl border border-slate-900 p-6 flex flex-col md:flex-row gap-6">
-                      <div className="flex-1 space-y-4">
+                  <div className="space-y-5 animate-rise" id="tab-persona">
+                    <div className="bg-white/[0.02] rounded-3xl border border-white/[0.06] p-7 flex flex-col md:flex-row gap-7">
+                      <div className="flex-1 space-y-5">
                         <div>
-                          <span className="text-[10px] uppercase font-mono tracking-wider text-cyan-400">Synthesized Biography Profile</span>
-                          <h4 className="text-xl font-semibold text-slate-100 tracking-tight mt-1">{dossier.creatorProfile.fullName}</h4>
-                          <p className="text-slate-400 text-xs italic mt-1 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-900 font-mono">
+                          <span className="eyebrow text-brass-300">Your bio</span>
+                          <p className="text-stone-300 text-[15px] italic font-display font-light mt-2 leading-relaxed">
                             "{dossier.creatorProfile.biography}"
                           </p>
                         </div>
-                        
+
+                        <div className="h-px bg-white/[0.06]" />
+
                         <div>
-                          <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500">Travel style summary</span>
-                          <p className="text-slate-300 text-xs mt-1 leading-relaxed">{dossier.travelPersona.summary}</p>
+                          <span className="eyebrow text-stone-500">Your travel style</span>
+                          <p className="text-stone-300 text-sm mt-2 leading-relaxed">{dossier.travelPersona.summary}</p>
                         </div>
                       </div>
 
-                      {/* Swarm classification metrics */}
-                      <div className="w-full md:w-64 bg-slate-950 p-4 border border-slate-900 rounded-xl space-y-3">
-                        <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                          <Sliders className="w-4 h-4 text-cyan-400" />
-                          <span className="text-xs font-semibold text-slate-200 font-mono">Swarm Inferences</span>
+                      {/* Classification metrics */}
+                      <div className="w-full md:w-64 shrink-0 bg-white/[0.02] p-5 border border-white/[0.06] rounded-2xl space-y-4">
+                        <div className="flex items-center gap-2 pb-3 border-b border-white/[0.06]">
+                          <Sliders className="w-4 h-4 text-brass-300" strokeWidth={1.5} />
+                          <span className="text-xs font-medium text-stone-300 tracking-wide">At a glance</span>
                         </div>
-                        
-                        <div className="space-y-2.5 text-xs text-slate-400">
-                          <div className="flex justify-between items-center bg-slate-900/50 p-1.5 rounded">
-                            <span>Travel style:</span>
-                            <span className="text-white font-medium">{dossier.travelPersona.travelStyle}</span>
-                          </div>
-                          <div className="flex justify-between items-center bg-slate-900/50 p-1.5 rounded">
-                            <span>Budget category:</span>
-                            <span className="text-indigo-400 font-semibold">{dossier.travelPersona.budgetProfile}</span>
-                          </div>
-                          <div className="flex justify-between items-center bg-slate-900/50 p-1.5 rounded">
-                            <span>Traveler setting:</span>
-                            <span className="text-white font-medium">{dossier.travelPersona.travellerType}</span>
-                          </div>
-                          <div className="flex justify-between items-center bg-slate-900/50 p-1.5 rounded">
-                            <span>Trip rate:</span>
-                            <span className="text-white font-medium">{dossier.travelPersona.travelFrequency}</span>
-                          </div>
-                          <div className="flex justify-between items-center bg-slate-900/50 p-1.5 rounded">
-                            <span>Hotel focus:</span>
-                            <span className="text-slate-300 text-[10px] truncate max-w-[120px]" title={dossier.travelPersona.hotelPreference}>
-                              {dossier.travelPersona.hotelPreference}
-                            </span>
-                          </div>
+
+                        <div className="space-y-3 text-xs">
+                          {[
+                            { label: 'Travel style', value: dossier.travelPersona.travelStyle },
+                            { label: 'Budget', value: dossier.travelPersona.budgetProfile, accent: true },
+                            { label: 'Travels as', value: dossier.travelPersona.travellerType },
+                            { label: 'Frequency', value: dossier.travelPersona.travelFrequency },
+                            { label: 'Stays', value: dossier.travelPersona.hotelPreference, truncate: true }
+                          ].map((row) => (
+                            <div key={row.label} className="flex justify-between items-center gap-3">
+                              <span className="text-stone-500">{row.label}</span>
+                              <span
+                                className={`font-medium text-right ${row.accent ? 'text-brass-300' : 'text-stone-200'} ${row.truncate ? 'truncate max-w-[130px]' : ''}`}
+                                title={row.truncate ? String(row.value) : undefined}
+                              >
+                                {row.value}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
 
                     {/* Preferences & Interests grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-900/80 space-y-3">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 font-mono">Discovered Activity Preferences</span>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="bg-white/[0.02] p-6 rounded-3xl border border-white/[0.06] space-y-4">
+                        <span className="eyebrow text-stone-500">Things you love doing</span>
+                        <div className="flex flex-wrap gap-2">
                           {dossier.travelPersona.activityPreferences.map((act) => (
-                            <span key={act} className="text-xs px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-300">
-                              🎯 {act}
+                            <span key={act} className="text-xs px-3.5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] text-stone-300">
+                              {act}
                             </span>
                           ))}
                         </div>
                       </div>
 
-                      <div className="bg-slate-900/40 p-5 rounded-xl border border-slate-900/80 space-y-3">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-amber-400 font-mono">Culinary profiling index</span>
-                        <div className="text-xs text-slate-300 flex items-center justify-between h-full pb-3">
-                          <span className="bg-slate-950 px-3 py-2 rounded border border-slate-900 flex-1">
-                            🍜 {dossier.travelPersona.foodPreference}
-                          </span>
-                        </div>
+                      <div className="bg-white/[0.02] p-6 rounded-3xl border border-white/[0.06] space-y-4">
+                        <span className="eyebrow text-stone-500">Food you gravitate to</span>
+                        <p className="text-sm text-stone-300 leading-relaxed font-display font-light italic">
+                          {dossier.travelPersona.foodPreference}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -471,47 +412,51 @@ export default function App() {
 
                 {/* TAB CONTENT 2: VISITED DESTINATIONS TIMELINE */}
                 {activeTab === 'history' && (
-                  <div className="space-y-4" id="tab-history">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-300">Identified Historic Landmarks</h4>
-                      <span className="text-xs text-slate-500 font-mono">{dossier.visitedDestinations.length} mapped footprint(s)</span>
+                  <div className="space-y-5 animate-rise" id="tab-history">
+                    <div className="flex items-baseline justify-between">
+                      <h4 className="font-display text-xl font-light text-stone-100">Places you've been</h4>
+                      <span className="text-xs text-stone-500">{dossier.visitedDestinations.length} destination(s)</span>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 gap-3">
                       {dossier.visitedDestinations.map((v, i) => (
-                        <div key={`${v.destination}-${i}`} className="bg-slate-900/30 p-5 rounded-2xl border border-slate-900 flex flex-col md:flex-row items-start justify-between gap-4 hover:border-slate-800 transition-colors">
-                          <div className="space-y-2 flex-1">
-                            <div className="flex items-center gap-2.5">
-                              <div className="p-1.5 bg-amber-500/10 border border-amber-500/30 rounded text-amber-400 shrink-0">
-                                <Compass className="w-4 h-4" />
+                        <div key={`${v.destination}-${i}`} className="group bg-white/[0.02] p-5 rounded-2xl border border-white/[0.06] flex flex-col md:flex-row items-start justify-between gap-4 hover:border-white/12 transition-colors">
+                          <div className="space-y-2.5 flex-1">
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-brass-400/10 border border-brass-400/25 text-brass-300 shrink-0">
+                                <Compass className="w-4 h-4" strokeWidth={1.5} />
                               </div>
                               <div>
-                                <h5 className="text-sm font-bold text-slate-100">{v.destination}</h5>
-                                <p className="text-xs text-slate-400">{v.country} • Visited {v.visitCount} times</p>
+                                <h5 className="text-sm font-semibold text-stone-100">{v.destination}</h5>
+                                <p className="text-xs text-stone-500">{v.country} · visited {v.visitCount}×</p>
                               </div>
                             </div>
 
-                            <p className="text-xs text-slate-300 leading-normal pl-9">
-                              <span className="font-semibold text-slate-400">Footprint evidence:</span> {v.evidence}
+                            <p className="text-xs text-stone-400 leading-relaxed pl-12">
+                              {v.evidence}
                             </p>
-                            
-                            <div className="flex items-center gap-2 flex-wrap pl-9">
-                              <span className="text-[10px] font-mono text-slate-500">Crawling evidence streams:</span>
-                              {v.sources.map(s => (
-                                <span key={s} className="text-[9px] uppercase font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
-                                  {s}
-                                </span>
-                              ))}
-                            </div>
+
+                            {DEBUG_MODE && (
+                              <div className="flex items-center gap-2 flex-wrap pl-12">
+                                <span className="text-[10px] font-mono text-stone-600">sources:</span>
+                                {v.sources.map(s => (
+                                  <span key={s} className="text-[9px] uppercase font-mono px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.08] text-stone-400">
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
 
-                          <div className="flex flex-col md:items-end gap-1 font-mono text-right w-full md:w-auto mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-900">
-                            <span className="text-xs text-cyan-400 bg-cyan-950/20 px-2 py-1 rounded border border-cyan-800/20 inline-block md:inline-none self-start md:self-auto">
-                              Confidence {Math.round(v.confidence * 100)}%
-                            </span>
-                            <span className="text-[10px] text-slate-500 flex items-center gap-1.5 justify-end mt-1">
-                              <Clock className="w-3 h-3 text-slate-600" />
-                              Resolved: {v.timeline}
+                          <div className="flex flex-col md:items-end gap-1.5 text-right w-full md:w-auto mt-1 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/[0.06]">
+                            {DEBUG_MODE && (
+                              <span className="text-[11px] text-brass-300 self-start md:self-auto">
+                                {Math.round(v.confidence * 100)}% confidence
+                              </span>
+                            )}
+                            <span className="text-[11px] text-stone-500 flex items-center gap-1.5 justify-end">
+                              <Clock className="w-3 h-3 text-stone-600" strokeWidth={1.5} />
+                              {v.timeline}
                             </span>
                           </div>
                         </div>
@@ -533,131 +478,76 @@ export default function App() {
 
                 {/* TAB CONTENT 4: GENERATED ITINERARIES */}
                 {activeTab === 'itineraries' && (
-                  <div className="space-y-6" id="tab-itineraries">
-                    <div className="flex items-center justify-between">
+                  <div className="space-y-5 animate-rise" id="tab-itineraries">
+                    <div className="flex items-baseline justify-between">
                       <div>
-                        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-300">GetSetYo AI Tailored Packages</h4>
-                        <p className="text-xs text-slate-500">Live polling matching the creator's curated personas</p>
+                        <h4 className="font-display text-xl font-light text-stone-100">Itineraries made for you</h4>
+                        <p className="text-xs text-stone-500 mt-0.5">Tailored trips you can open and book on GetSetYo</p>
                       </div>
-                      <span className="text-xs font-mono font-bold bg-cyan-950 border border-cyan-800 text-cyan-400 px-3 py-1 rounded-full animate-pulse">
-                        Auto-Polling status complete
-                      </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {dossier.recommendations.map((rec, index) => {
-                        // find corresponding itinerary
-                        const itinerary = dossier.generatedItineraries.find(i => i.destination === rec.destination) || {
-                          packageDealId: 3000000 + index,
-                          status: 'PENDING',
-                          durationDays: 5,
-                          estimatedCost: '$2,800 - $4,800',
-                          hotels: ['Luxury Boutique Resorts'],
-                          highlights: ['Private orientation tour', 'Premium activity voucher']
-                        };
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {dossier.recommendations.map((rec) => {
+                        const itinerary = dossier.generatedItineraries.find(i => i.destination === rec.destination);
+                        if (!itinerary) return null;
 
                         const packageId = itinerary.packageDealId;
-
-                        const isPending = itinerary.status === 'PENDING' || itinerary.status === 'GENERATING';
+                        const productUrl = itinerary.productUrl || `https://getsetyo.com/product/${packageId}`;
 
                         return (
-                          <div 
-                            key={rec.destination} 
-                            className={`p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between hover:border-slate-800 ${
-                              isPending 
-                                ? 'bg-slate-900/10 border-slate-900' 
-                                : 'bg-slate-900/40 border-slate-900'
-                            }`}
+                          <a
+                            key={rec.destination}
+                            href={productUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group p-6 rounded-3xl border border-white/[0.06] bg-white/[0.02] transition-all duration-300 flex flex-col justify-between gap-5 hover:border-brass-400/30 hover:bg-white/[0.035]"
                             id={`itinerary-card-${rec.destination.replace(/\s+/g, '')}`}
                           >
-                            <div className="space-y-3.5">
-                              {/* Header category info */}
+                            <div className="space-y-4">
                               <div className="flex items-center justify-between">
-                                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                                  {rec.category}
-                                </span>
-                                <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                                  itinerary.status === 'COMPLETED' 
-                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                    : 'bg-cyan-950 text-cyan-300 border border-cyan-800 animate-pulse'
-                                }`}>
-                                  ● {itinerary.status}
-                                </span>
+                                <span className="eyebrow text-brass-300">{rec.category.replace(' Destination', '')}</span>
+                                {DEBUG_MODE && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sage-500/10 text-sage-300 border border-sage-500/20">
+                                    {itinerary.status}
+                                  </span>
+                                )}
                               </div>
 
                               <div>
-                                <h5 className="text-base font-bold text-white tracking-tight">{rec.destination}</h5>
-                                <p className="text-[11px] text-slate-400 mt-0.5">{rec.country} • Matching Index Score: <span className="text-emerald-400 font-semibold">{rec.score}%</span></p>
+                                <h5 className="font-display text-2xl font-light text-stone-50 leading-tight">{rec.destination}</h5>
+                                <p className="text-xs text-stone-500 mt-1">
+                                  {rec.country}
+                                  {DEBUG_MODE && (
+                                    <> · match {rec.score}%</>
+                                  )}
+                                </p>
                               </div>
 
-                              <p className="text-xs text-slate-300 leading-normal italic">
-                                "{rec.reason}"
+                              <p className="text-[13px] text-stone-400 leading-relaxed">
+                                {rec.reason}
                               </p>
+                            </div>
 
-                              {isPending ? (
-                                <div className="space-y-2 py-4">
-                                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
-                                    <span>Polling Package Deal status...</span>
-                                    <span>24%</span>
-                                  </div>
-                                  <div className="w-full bg-slate-950 rounded-full h-1.5 border border-slate-900 overflow-hidden">
-                                    <div className="bg-cyan-500 h-full w-[24%] animate-pulse" />
-                                  </div>
-                                </div>
+                            <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between">
+                              {DEBUG_MODE ? (
+                                <span className="text-[11px] font-mono text-stone-600">#{packageId}</span>
                               ) : (
-                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-900 space-y-3">
-                                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-400">
-                                    <div>
-                                      <span>Duration:</span>
-                                      <span className="block text-slate-200 font-semibold">{itinerary.durationDays} Days</span>
-                                    </div>
-                                    <div>
-                                      <span>Est Cost:</span>
-                                      <span className="block text-slate-200 font-semibold">{itinerary.estimatedCost}</span>
-                                    </div>
-                                  </div>
-
-                                  <div className="border-t border-slate-900 pt-2">
-                                    <span className="text-[9px] uppercase font-mono text-slate-500 tracking-wider">Premium Lodging Option:</span>
-                                    <span className="block text-xs font-medium text-slate-300 mt-0.5">🏨 {itinerary.hotels[0]}</span>
-                                  </div>
-
-                                  <div className="border-t border-slate-900 pt-2 space-y-1">
-                                    <span className="text-[9px] uppercase font-mono text-slate-500 tracking-wider">Itinerary Highlights:</span>
-                                    {itinerary.highlights.map((h, i) => (
-                                      <div key={i} className="text-xs text-slate-400 flex items-center gap-1.5">
-                                        <span className="w-1 h-1 rounded-full bg-cyan-400" />
-                                        <span>{h}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
+                                <span className="text-[11px] text-stone-500">Full day-by-day plan</span>
                               )}
+                              <span className="text-sm text-brass-300 group-hover:text-brass-200 font-medium flex items-center gap-1.5 transition-colors">
+                                View itinerary
+                                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.5} />
+                              </span>
                             </div>
-
-                            <div className="pt-4 border-t border-slate-900/50 flex items-center justify-between text-xs font-mono">
-                              <span className="text-slate-500">Deals ID: #{packageId}</span>
-                              {!isPending && (
-                                <a
-                                  href={`https://getsetyo.com/product/${packageId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition-colors bg-cyan-500/10 hover:bg-cyan-500/15 border border-cyan-500/20 px-3 py-1.5 rounded-lg"
-                                >
-                                  <span>Lock package price</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              )}
-                            </div>
-                          </div>
+                          </a>
                         );
                       })}
                     </div>
                   </div>
                 )}
 
-                {/* TAB CONTENT: AGENT CALL & RESPONSE TRACE (user requested tab) */}
-                {activeTab === 'agentSwarm' && (
+                {/* TAB CONTENT: AGENT CALL & RESPONSE TRACE (internal/debug only) */}
+                {DEBUG_MODE && activeTab === 'agentSwarm' && (
                   <div className="space-y-6" id="tab-agent-swarm">
                     <div className="flex flex-col md:flex-row gap-2 justify-between items-start md:items-center">
                       <div>
@@ -725,11 +615,9 @@ export default function App() {
                               role: "Controller / Task router",
                               description: "Decides task dependencies, maps user input, schedules async jobs via simulated Cloud Pub/Sub, and initiates workflow state logging.",
                               request: {
-                                orchestrator: "Google ADK Multi-Agent Synthesis Engine",
                                 targetHandle: `@${dossier.instagramUsername}`,
                                 action: "ORCHESTRATE_PIPELINE",
                                 targetStages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-                                mode: "Parallel Asynchronous Worker",
                                 routingStrategy: "Planner-Led Orchestration"
                               },
                               response: {
@@ -749,8 +637,7 @@ export default function App() {
                                     "MapAgent",
                                     "ResultAggregatorAgent"
                                   ]
-                                },
-                                pubSubTopic: "instagram-trigger-analyze"
+                                }
                               }
                             },
                             {
@@ -760,9 +647,7 @@ export default function App() {
                               request: {
                                 provider: "Apify Instagram Scraper Service",
                                 targetHandle: dossier.instagramUsername,
-                                itemsLimit: 100,
-                                extractionMetrics: ["biography", "posts", "reels", "taggedPosts"],
-                                excludePastDays: 180
+                                extractionMetrics: ["biography", "posts", "reels", "taggedPosts"]
                               },
                               response: {
                                 status: "SUCCESS",
@@ -779,8 +664,7 @@ export default function App() {
                                   reels: dossier.instagramData.reels.length,
                                   taggedPosts: dossier.instagramData.taggedPosts.length
                                 },
-                                scrapingStatus: "COMPLETED",
-                                rateLimitConsumed: "0.27%"
+                                scrapingStatus: "COMPLETED"
                               }
                             },
                             {
@@ -810,7 +694,6 @@ export default function App() {
                                   uniqueLocationsCount: dossier.structuredContent.locations.length,
                                   uniqueLocationsSample: dossier.structuredContent.locations
                                 },
-                                textDensityTokenEstimate: 840,
                                 enrichmentStatus: "READY_FOR_AI"
                               }
                             },
@@ -823,8 +706,7 @@ export default function App() {
                                 model: "gemini-3.5-flash",
                                 temperature: 0.2,
                                 responseMimeType: "application/json",
-                                systemInstructions: "Inject realistic matching data and maintain structured JSON constraints.",
-                                activePromptTokens: 840,
+                                systemInstructions: "Analyze only the real scraped Instagram content and maintain structured JSON constraints.",
                                 sourceDataProvided: {
                                   username: dossier.instagramUsername,
                                   bio: dossier.creatorProfile.biography,
@@ -834,11 +716,7 @@ export default function App() {
                               response: {
                                 status: "PARSED_SUCCESSFULLY",
                                 finalModelUsed: "models/gemini-3.5-flash",
-                                visitedDestinationsDetected: dossier.visitedDestinations,
-                                extractionMetadata: {
-                                  unauthenticatedTokenCleared: true,
-                                  confidenceThresholdApplied: 0.7
-                                }
+                                visitedDestinationsDetected: dossier.visitedDestinations
                               }
                             },
                             {
@@ -875,8 +753,7 @@ export default function App() {
                                 constraints: {
                                   budgetProfile: dossier.travelPersona.budgetProfile,
                                   travelStyle: dossier.travelPersona.travelStyle
-                                },
-                                globalLocationsCatalogSize: 450
+                                }
                               },
                               response: {
                                 recommendationsCompiled: dossier.recommendations.map(rec => ({
@@ -906,20 +783,15 @@ export default function App() {
                               role: "E-Commerce Package Deal Integrator",
                               description: "Orders parallel batch requests to GetSetYo packaging APIs, and automatically registers package deal prices and hoteliers.",
                               request: {
-                                apiEndpoint: "POST /api/v2/generate-itinerary-package",
-                                authorization: "Bearer [SYSTEM_ROUTING_TOKEN_APPROVED]",
+                                apiEndpoint: "POST https://www.getsetyo.club/itinerary/generate-ai-itinerary",
                                 queries: dossier.prompts
                               },
                               response: {
-                                pollingResult: "COMPLETED",
                                 packageCount: dossier.generatedItineraries.length,
                                 resultsActive: dossier.generatedItineraries.map(it => ({
                                   destination: it.destination,
                                   dealId: it.packageDealId,
                                   status: it.status,
-                                  hotels: it.hotels,
-                                  durationDays: it.durationDays,
-                                  cost: it.estimatedCost,
                                   productUrl: it.productUrl
                                 }))
                               }
@@ -938,8 +810,7 @@ export default function App() {
                               },
                               response: {
                                 plotStatus: "SUCCESS",
-                                coordinatesRegistered: dossier.mapData,
-                                geocodingCacheHitRate: "80%"
+                                coordinatesRegistered: dossier.mapData
                               }
                             },
                             {
@@ -947,17 +818,13 @@ export default function App() {
                               role: "Caching Aggregating Node",
                               description: "Compacts metadata schemas, stamps generation timestamps, and persists final analysis results in simulated Redis Cache with 30-day TTL parameters.",
                               request: {
-                                databaseType: "Google Memorystore (Redis Mode)",
-                                payloadSizeKb: 12.5,
                                 cacheKeys: [
                                   `creator-analysis:${dossier.instagramUsername}`,
                                   `creator-itineraries:${dossier.instagramUsername}`
                                 ]
                               },
                               response: {
-                                cacheWritten: true,
-                                ttlSeconds: 2592000,
-                                outputSummary: "Creator dossier compiled. Redis entry status: REFRESHED.",
+                                outputSummary: "Creator dossier compiled and returned to the dashboard.",
                                 presenterPayloadOk: true
                               }
                             }
@@ -1040,8 +907,8 @@ export default function App() {
                   </div>
                 )}
 
-                {/* TAB CONTENT 5: ARCHITECTURAL DESIGN SPECS */}
-                {activeTab === 'architecture' && (
+                {/* TAB CONTENT 5: ARCHITECTURAL DESIGN SPECS (internal/debug only) */}
+                {DEBUG_MODE && activeTab === 'architecture' && (
                   <div className="bg-slate-900/40 p-6 rounded-2xl border border-slate-900 space-y-6 text-sm" id="tab-architecture">
                     <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
                       <ShieldCheck className="w-5.5 h-5.5 text-emerald-400 animate-pulse" />
@@ -1110,32 +977,31 @@ export default function App() {
               </div>
             ) : (
               // Idle layout helper
-              <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-8 bg-slate-900/10 border border-slate-900 rounded-3xl gap-4">
-                <div className="relative">
-                  <div className="absolute -inset-2 rounded-full bg-cyan-500/10 blur" />
-                  <Compass className="w-12 h-12 text-slate-700 animate-spin" style={{ animationDuration: '40s' }} />
+              <div className="h-full min-h-[420px] flex flex-col items-center justify-center text-center p-8 bg-white/[0.015] border border-white/[0.06] rounded-3xl gap-5">
+                <div className="flex items-center justify-center w-16 h-16 rounded-full border border-white/[0.08] bg-white/[0.02]">
+                  <Compass className="w-8 h-8 text-stone-600 animate-spin" strokeWidth={1.25} style={{ animationDuration: '40s' }} />
                 </div>
-                
-                <div>
-                  <h4 className="text-base font-bold text-slate-300">Awaiting Creator Handle Input</h4>
-                  <p className="text-xs text-slate-500 max-w-sm mt-1">
-                    Select one of our showcase presets above or submit a custom public Instagram handle to activate the agent swarm intelligence pipeline.
+
+                <div className="max-w-sm">
+                  <h4 className="font-display text-xl font-light text-stone-200">Your journey starts with a handle</h4>
+                  <p className="text-xs text-stone-500 mt-2 leading-relaxed">
+                    Enter your Instagram handle above, or try an example, and we'll compose tailored itineraries from your travel story.
                   </p>
                 </div>
 
                 {/* Micro instruction grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[10px] font-mono text-slate-500 mt-4 max-w-xl">
-                  <div className="p-3 bg-slate-950 border border-slate-900 rounded-xl flex flex-col items-center gap-1.5">
-                    <Sparkles className="w-4.5 h-4.5 text-indigo-500/80" />
-                    <span>Infers budget & styles from grid posts & reels.</span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-stone-400 mt-3 max-w-xl">
+                  <div className="p-4 bg-white/[0.02] border border-white/[0.06] rounded-2xl flex flex-col items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-brass-300" strokeWidth={1.5} />
+                    <span>Reads your travel style from posts &amp; reels.</span>
                   </div>
-                  <div className="p-3 bg-slate-950 border border-slate-900 rounded-xl flex flex-col items-center gap-1.5">
-                    <MapPin className="w-4.5 h-4.5 text-amber-500/80" />
-                    <span>Plops geographical GPS pins with precision.</span>
+                  <div className="p-4 bg-white/[0.02] border border-white/[0.06] rounded-2xl flex flex-col items-center gap-2">
+                    <MapPin className="w-5 h-5 text-brass-300" strokeWidth={1.5} />
+                    <span>Maps the places you've already been.</span>
                   </div>
-                  <div className="p-3 bg-slate-950 border border-slate-900 rounded-xl flex flex-col items-center gap-1.5">
-                    <Plane className="w-4.5 h-4.5 text-cyan-500/80" />
-                    <span>Autobuilds GetSetYo itinerary packages live.</span>
+                  <div className="p-4 bg-white/[0.02] border border-white/[0.06] rounded-2xl flex flex-col items-center gap-2">
+                    <Plane className="w-5 h-5 text-brass-300" strokeWidth={1.5} />
+                    <span>Builds ready-to-book itineraries for you.</span>
                   </div>
                 </div>
               </div>
@@ -1144,12 +1010,12 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="border-t border-slate-900 bg-slate-950 px-4 md:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 font-mono select-none mt-auto">
+      <footer className="border-t border-white/[0.06] px-5 md:px-10 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-stone-500 select-none mt-auto">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span>PRODUCTION-READY CLOUD RUN ENTRANCES APPROVED</span>
+          <ShieldCheck className="w-3.5 h-3.5 text-sage-500" strokeWidth={1.5} />
+          <span className="tracking-wide">Private &amp; secure — we only read public profile data</span>
         </div>
-        <span>© 2026 GETSETYO CREATOR TRAVEL MESH</span>
+        <span className="font-display italic text-stone-400">GetSetYo · {new Date().getFullYear()}</span>
       </footer>
     </div>
   );

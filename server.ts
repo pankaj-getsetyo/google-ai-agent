@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { ApifyClient } from "apify-client";
 import dotenv from "dotenv";
 import { 
   CreatorIntelligenceDossier, 
@@ -18,6 +19,7 @@ import {
   InstagramProfile
 } from "./src/types.js";
 
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const app = express();
@@ -69,10 +71,21 @@ type CacheValue = {
   data: any;
   expiresAt: number;
 };
+// Toggle the (in-memory) Redis-style cache via the USE_REDIS env var.
+// Default OFF — when disabled, every analysis runs fresh (no cache reads/writes).
+const USE_REDIS = process.env.USE_REDIS === "true";
+
 class RedisCache {
   private store: Map<string, CacheValue> = new Map();
+  private enabled: boolean;
+
+  constructor(enabled: boolean) {
+    this.enabled = enabled;
+    console.log(`[Redis] Cache ${enabled ? "ENABLED" : "DISABLED"} (set USE_REDIS=true to enable).`);
+  }
 
   get(key: string): any | null {
+    if (!this.enabled) return null;
     const entry = this.store.get(key);
     if (!entry) return null;
     if (Date.now() > entry.expiresAt) {
@@ -84,13 +97,14 @@ class RedisCache {
   }
 
   set(key: string, value: any, ttlSeconds: number = 2592000): void { // 30 Days default
+    if (!this.enabled) return;
     const expiresAt = Date.now() + (ttlSeconds * 1000);
     this.store.set(key, { data: value, expiresAt });
     console.log(`[Redis] Saved key: ${key} with TTL: ${ttlSeconds}s`);
   }
 }
 
-const redis = new RedisCache();
+const redis = new RedisCache(USE_REDIS);
 
 // --- IN-BACKGROUND PROGRESS ENGINE ---
 interface JobState {
@@ -177,6 +191,88 @@ async function fetchGetSetYo(
   return { response, resData, usedCookie: true };
 }
 
+// --- REAL INSTAGRAM SCRAPING VIA APIFY ---
+// Calls the Apify Instagram Scraper actor (shu8hvrXbJbY3Eb9W) to pull a live
+// profile feed. Requires APIFY_TOKEN to be configured. Throws (no dummy data)
+// when the token is missing or the scrape returns nothing.
+async function scrapeInstagramProfile(
+  username: string,
+  logFn: (msg: string) => void
+): Promise<{ profile: InstagramProfile; posts: InstagramPost[] }> {
+  const token = process.env.APIFY_TOKEN;
+  if (!token || token.trim() === "") {
+    throw new Error("APIFY_TOKEN is not configured. Set APIFY_TOKEN in your environment/secrets to run a live Instagram scrape.");
+  }
+
+  const cleanUsername = username.replace(/^@/, "").trim();
+  const client = new ApifyClient({ token });
+
+  const input = {
+    directUrls: [`https://www.instagram.com/${cleanUsername}/`],
+    resultsType: "details",
+    resultsLimit: 50,
+    addParentData: false,
+    searchType: "user",
+    searchLimit: 1,
+  };
+
+  logFn(`[Apify] Starting actor 'shu8hvrXbJbY3Eb9W' (Instagram Scraper) for @${cleanUsername}...`);
+  const run = await client.actor("shu8hvrXbJbY3Eb9W").call(input);
+  logFn(`[Apify] Actor run finished (runId: ${run.id}, status: ${run.status}). Fetching dataset...`);
+
+  const { items } = await client.dataset(run.defaultDatasetId).listItems();
+  if (!items || items.length === 0) {
+    throw new Error(`Apify returned no data for @${cleanUsername}. The profile may be private, invalid, or the scrape was rate-limited.`);
+  }
+
+  // The actor can return either a profile "details" object (with latestPosts)
+  // or a flat list of post objects. Handle both shapes.
+  const first: any = items[0];
+  let profileRaw: any;
+  let rawPosts: any[];
+
+  if (first.latestPosts !== undefined || first.biography !== undefined || first.followersCount !== undefined) {
+    profileRaw = first;
+    rawPosts = Array.isArray(first.latestPosts) ? first.latestPosts : [];
+  } else {
+    rawPosts = items as any[];
+    profileRaw = {
+      username: first.ownerUsername || cleanUsername,
+      fullName: first.ownerFullName || cleanUsername,
+      biography: "",
+      followersCount: 0,
+      postsCount: items.length,
+      profilePicUrl: first.displayUrl || "",
+    };
+  }
+
+  const profile: InstagramProfile = {
+    username: profileRaw.username || cleanUsername,
+    fullName: profileRaw.fullName || profileRaw.ownerFullName || cleanUsername,
+    biography: profileRaw.biography || "",
+    followersCount: typeof profileRaw.followersCount === "number" ? profileRaw.followersCount : 0,
+    postsCount: typeof profileRaw.postsCount === "number" ? profileRaw.postsCount : rawPosts.length,
+    profilePicUrl: profileRaw.profilePicUrlHD || profileRaw.profilePicUrl || profileRaw.displayUrl || "",
+  };
+
+  const posts: InstagramPost[] = rawPosts.map((p: any, idx: number) => {
+    const isReel = p.type === "Video" || p.productType === "clips" || p.isVideo === true;
+    return {
+      id: String(p.id || p.shortCode || `post_${idx + 1}`),
+      caption: p.caption || "",
+      hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
+      mentions: Array.isArray(p.mentions) ? p.mentions : [],
+      location: p.locationName || (p.location && p.location.name) || "",
+      likes: typeof p.likesCount === "number" && p.likesCount >= 0 ? p.likesCount : 0,
+      comments: typeof p.commentsCount === "number" && p.commentsCount >= 0 ? p.commentsCount : 0,
+      type: isReel ? "reel" : "post",
+    };
+  });
+
+  logFn(`[Apify] Scraped @${profile.username}: ${profile.followersCount} followers, ${profile.postsCount} total posts, ${posts.length} feed items retrieved.`);
+  return { profile, posts };
+}
+
 // Background agent execution simulation runner
 async function runAgentWorker(username: string): Promise<void> {
   const job = activeJobs.get(username);
@@ -204,16 +300,23 @@ async function runAgentWorker(username: string): Promise<void> {
     logStep('PlannerAgent', `Validating Instagram handle format. Status: VALID. Matching extraction profile...`);
     await new Promise(r => setTimeout(r, 1500));
 
-    // Stage 2: Extraction Agent
+    // Stage 2: Extraction Agent (LIVE Apify scrape — no dummy data)
     job.currentAgentIndex = 1;
     logStep('InstagramExtractionAgent', `Calling Instagram Scraper (Apify backend) to grab profile feed & tagged posts...`);
-    logStep('InstagramExtractionAgent', `Successfully retrieved: Biography context, 54 Grid elements, 18 Reels assets, and 12 Tagged media. Stories filter: OMITTED.`);
-    await new Promise(r => setTimeout(r, 1800));
+    const scraped = await scrapeInstagramProfile(username, (m) => logStep('InstagramExtractionAgent', m));
+    const realProfile = scraped.profile;
+    const realPosts = scraped.posts.filter(p => p.type === "post");
+    const realReels = scraped.posts.filter(p => p.type === "reel");
+    logStep('InstagramExtractionAgent', `Successfully retrieved live data: Biography context, ${realPosts.length} grid elements and ${realReels.length} reels assets from Apify dataset. Stories filter: OMITTED.`);
 
-    // Stage 3: Content Structuring Agent
+    // Stage 3: Content Structuring Agent (from REAL scraped content)
     job.currentAgentIndex = 2;
     logStep('ContentStructuringAgent', `De-duplicating captions and hashtags. Consolidating mentions and geotag indicators...`);
-    logStep('ContentStructuringAgent', `Structured captions content. Extracted 24 localized check-in profiles and 43 tags.`);
+    const realCaptions = scraped.posts.map(p => p.caption).filter(Boolean);
+    const realHashtags = Array.from(new Set(scraped.posts.flatMap(p => p.hashtags)));
+    const realMentions = Array.from(new Set(scraped.posts.flatMap(p => p.mentions)));
+    const realLocations = Array.from(new Set(scraped.posts.map(p => p.location).filter(Boolean)));
+    logStep('ContentStructuringAgent', `Structured captions content. Extracted ${realLocations.length} localized check-in profiles and ${realHashtags.length} tags from ${realCaptions.length} captions.`);
     await new Promise(r => setTimeout(r, 1500));
 
     // Stage 4: Travel Detection Agent
@@ -229,24 +332,39 @@ async function runAgentWorker(username: string): Promise<void> {
       throw new Error("GEMINI_API_KEY is not configured. Please open AI Studio 'Settings' -> 'Secrets' and set your Gemini API key to run a live travel intelligence analysis.");
     }
 
-    logStep('TravelDetectionAgent', `Invoking Google GenAI ('gemini-3.5-flash') to perform deep intelligence synthesis...`);
+    logStep('TravelDetectionAgent', `Invoking Google GenAI ('gemini-3.5-flash') to perform deep intelligence synthesis on REAL scraped Instagram data...`);
     try {
+      const realDataContext = JSON.stringify({
+        profile: {
+          username: realProfile.username,
+          fullName: realProfile.fullName,
+          biography: realProfile.biography,
+          followersCount: realProfile.followersCount,
+          postsCount: realProfile.postsCount
+        },
+        captions: realCaptions,
+        hashtags: realHashtags,
+        mentions: realMentions,
+        locations: realLocations
+      }, null, 2);
+
       const prompt = `
-        Perform multi-agent travel intelligence research for the public Instagram username @${username}.
-        Generate a beautiful, highly detailed, realistic CreatorTravelIntelligenceDossier JSON payload:
-        - Extract details for bio, posts, reels based on the name @${username}. Let the content match its theme.
-        - Identify 2 to 3 visited destinations with count, source evidence, and confidence.
+        You are a travel intelligence analyst. Below is REAL data scraped (via Apify) from the public Instagram
+        account @${realProfile.username}. Analyze ONLY this real content — do NOT invent posts, captions, or profile facts.
+
+        REAL_SCRAPED_DATA:
+        ${realDataContext}
+
+        Based strictly on the real biography, captions, hashtags, mentions and locations above, produce a travel
+        intelligence analysis:
+        - Identify 2 to 3 visited destinations actually evidenced in the real content (with visitCount, source evidence quoting/paraphrasing the real captions or locations, and confidence). If the real content has little travel signal, infer conservatively and lower the confidence.
         - Define travel persona: budgetProfile ('Budget', 'Mid-range', or 'Luxury'), travelStyle ('Relaxed', 'Adventure', 'Immersive', or 'Fast-paced'), travellerType ('Solo', 'Couple', 'Group', 'Family'), activityPreferences, travelFrequency ('High', 'Medium', 'Low').
-        - Generate exactly 5 targeted recommendations with category: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'. Give a detailed score (0 to 100) and reasoning for each.
-        - Formulate 5 custom travel prompts for GetSetYo Itinerary API.
-        - Generate realistic sample instagramData:
-          * posts: Array of 3 realistic, descriptive posts with id ("pos_1", "pos_2", "pos_3"), a beautiful and descriptive caption, hashtags (list of strings), mentions (list of handles like @luxuryhotels or @localfoodies), location, likes (number), comments (number), and type: "post".
-          * reels: Array of 3 realistic, descriptive reels with id ("reel_1", "reel_2", "reel_3"), descriptive caption, hashtags, mentions, location, likes, comments, and type: "reel".
-          * All posts/reels captions, hashtags and locations must match the generated creator's personality and locations. Do NOT use placeholder values or generic text.
+        - Generate exactly 5 targeted recommendations with category: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'. Give a detailed score (0 to 100) and reasoning grounded in the real content for each.
+        - Formulate 5 custom travel prompts for the GetSetYo Itinerary API (one per recommendation).
         - Plot coordinate positions (latitude and longitude as numbers) for each visited and recommended destination.
-        The output must strictly be in JSON matching this exact structure:
+
+        The output must strictly be valid JSON matching this exact structure (do NOT include instagramData or creatorProfile — those come from the real scrape):
         {
-          "creatorProfile": { "username": "@${username}", "fullName": "string", "biography": "string", "followersCount": 150000, "postsCount": 120, "profilePicUrl": "string Unsplash travel theme URL" },
           "visitedDestinations": [
             { "destination": "Bali", "country": "Indonesia", "visitCount": 3, "confidence": 0.95, "sources": ["caption"], "evidence": "string", "timeline": "2024-05" }
           ],
@@ -257,20 +375,12 @@ async function runAgentWorker(username: string): Promise<void> {
           "prompts": [
             { "destination": "Maldives", "prompt": "string" }
           ],
-          "instagramData": {
-            "posts": [
-              { "id": "pos_1", "caption": "string", "hashtags": ["string"], "mentions": ["string"], "location": "string", "likes": 5000, "comments": 120, "type": "post" }
-            ],
-            "reels": [
-              { "id": "reel_1", "caption": "string", "hashtags": ["string"], "mentions": ["string"], "location": "string", "likes": 12000, "comments": 350, "type": "reel" }
-            ]
-          },
           "mapData": {
             "visitedLocations": [ { "lat": -8.4, "lng": 115.1, "name": "Bali", "country": "Indonesia", "type": "visited" } ],
             "recommendedLocations": [ { "lat": 3.2, "lng": 73.2, "name": "Maldives", "country": "Maldives", "type": "recommended" } ]
           }
         }
-        Ensure the JSON is completely valid, fully populated with gorgeous custom details, and has NO trailing commas.
+        Ensure the JSON is completely valid, fully populated, and has NO trailing commas.
       `;
 
       const response = await client.models.generateContent({
@@ -289,68 +399,12 @@ async function runAgentWorker(username: string): Promise<void> {
       }
       const parsed = JSON.parse(cleanText.trim());
 
-      // Process coordinates defaults
-      if (parsed.mapData?.visitedLocations) {
-        parsed.mapData.visitedLocations = parsed.mapData.visitedLocations.map((l: any) => {
-          const defaultCoords = getCoordinates(l.name, l.country);
-          return {
-            lat: typeof l.lat === 'number' ? l.lat : defaultCoords.lat,
-            lng: typeof l.lng === 'number' ? l.lng : defaultCoords.lng,
-            name: l.name,
-            country: l.country || "",
-            type: 'visited'
-          };
-        });
-      }
-      if (parsed.mapData?.recommendedLocations) {
-        parsed.mapData.recommendedLocations = parsed.mapData.recommendedLocations.map((l: any) => {
-          const defaultCoords = getCoordinates(l.name, l.country);
-          return {
-            lat: typeof l.lat === 'number' ? l.lat : defaultCoords.lat,
-            lng: typeof l.lng === 'number' ? l.lng : defaultCoords.lng,
-            name: l.name,
-            country: l.country || "",
-            type: 'recommended'
-          };
-        });
-      }
-
-      const parsedProfile = parsed.creatorProfile || {};
       const parsedPersona = parsed.travelPersona || {};
-      const parsedInstagram = parsed.instagramData || {};
-      
-      const generatedPic = parsedProfile.profilePicUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&fit=crop&q=80";
 
-      const geminiPosts = (parsedInstagram.posts || []).map((p: any, idx: number) => ({
-        id: p.id || `pos_${idx + 1}`,
-        caption: p.caption || "Exploring beautiful horizons!",
-        hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
-        mentions: Array.isArray(p.mentions) ? p.mentions : [],
-        location: p.location || "Scenic Location",
-        likes: typeof p.likes === "number" ? p.likes : 4500,
-        comments: typeof p.comments === "number" ? p.comments : 120,
-        type: "post" as const
-      }));
-
-      const geminiReels = (parsedInstagram.reels || []).map((p: any, idx: number) => ({
-        id: p.id || `reel_${idx + 1}`,
-        caption: p.caption || "Real memories, real travels!",
-        hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
-        mentions: Array.isArray(p.mentions) ? p.mentions : [],
-        location: p.location || "Scenic Spot",
-        likes: typeof p.likes === "number" ? p.likes : 8200,
-        comments: typeof p.comments === "number" ? p.comments : 250,
-        type: "reel" as const
-      }));
-
-      const profile: InstagramProfile = {
-        username: username,
-        fullName: parsedProfile.fullName || `${username.replace(/[\._]/g, " ").replace(/\b\w/g, c => c.toUpperCase())}`,
-        biography: parsedProfile.biography || "Curating travel stories and sunset escapes.",
-        followersCount: typeof parsedProfile.followersCount === "number" ? parsedProfile.followersCount : 124000,
-        postsCount: typeof parsedProfile.postsCount === "number" ? parsedProfile.postsCount : 180,
-        profilePicUrl: generatedPic
-      };
+      // Use the REAL scraped profile and posts (no Gemini-generated dummy data here).
+      const profile: InstagramProfile = realProfile;
+      const geminiPosts = realPosts;
+      const geminiReels = realReels;
 
       const travelPersona: TravelPersona = {
         budgetProfile: ['Budget', 'Mid-range', 'Luxury'].includes(parsedPersona.budgetProfile) ? parsedPersona.budgetProfile : "Luxury",
@@ -387,6 +441,31 @@ async function runAgentWorker(username: string): Promise<void> {
         prompt: p.prompt || `Generate a beautiful 5-day itinerary focused on local highlights.`
       }));
 
+      // Build map pins directly from the analysis so EVERY visited city and
+      // every recommended ("next possible") city is plotted — matching the
+      // recommendations/itineraries 1:1. Prefer Gemini's own coordinates when
+      // present, otherwise resolve via the coordinates lookup.
+      const geminiVisitedPins: any[] = parsed.mapData?.visitedLocations || [];
+      const geminiRecommendedPins: any[] = parsed.mapData?.recommendedLocations || [];
+      const resolveCoords = (pool: any[], name: string, country: string) => {
+        const match = pool.find((l: any) => typeof l?.name === "string" && l.name.toLowerCase() === name.toLowerCase());
+        if (match && typeof match.lat === "number" && typeof match.lng === "number") {
+          return { lat: match.lat, lng: match.lng };
+        }
+        return getCoordinates(name, country);
+      };
+
+      const mapData: MapData = {
+        visitedLocations: visitedDestinations.map(v => {
+          const c = resolveCoords(geminiVisitedPins, v.destination, v.country);
+          return { lat: c.lat, lng: c.lng, name: v.destination, country: v.country, type: "visited" as const };
+        }),
+        recommendedLocations: recommendations.map(r => {
+          const c = resolveCoords(geminiRecommendedPins, r.destination, r.country);
+          return { lat: c.lat, lng: c.lng, name: r.destination, country: r.country, type: "recommended" as const };
+        })
+      };
+
       dossierData = {
         instagramUsername: username,
         creatorProfile: profile,
@@ -414,7 +493,7 @@ async function runAgentWorker(username: string): Promise<void> {
         recommendations,
         prompts,
         generatedItineraries: [], 
-        mapData: parsed.mapData || { visitedLocations: [], recommendedLocations: [] },
+        mapData,
         generatedAt: new Date().toISOString()
       };
 
@@ -550,15 +629,14 @@ async function runAgentWorker(username: string): Promise<void> {
           ? `https://www.getsetyo.club/trip/details/${packageDealId}` 
           : `https://getsetyo.com/product/${packageDealId}`;
 
+        // Real itinerary lives at the GetSetYo product URL. We only keep the
+        // values the API actually returns — no fabricated duration/cost/hotels.
+        // IN_PROGRESS at creation means our generation task is done.
         itineraries.push({
           destination: r.destination,
           packageDealId,
           status: 'COMPLETED',
-          productUrl,
-          durationDays: 5,
-          estimatedCost: dossierData.travelPersona.budgetProfile === "Luxury" ? "$2,800 - $4,800" : "$600 - $1,100",
-          highlights: ["Local guide premium day-out", "Boutique stay reservation", "Customized travel pack"],
-          hotels: [dossierData.travelPersona.budgetProfile === "Luxury" ? "Aman Resorts or Luxury Caves" : "Local Design Hostels"]
+          productUrl
         });
       } catch (apiErr: any) {
         console.error(`GetSetYo API call failed for ${r.destination}:`, apiErr);
@@ -642,9 +720,10 @@ app.post("/api/analyze", (req, res) => {
     });
   }
 
-  // Check if job already active
+  // Check if job already active. Only block when actively running; allow
+  // re-analysis when a previous attempt failed.
   const activeJob = activeJobs.get(cleanUsername);
-  if (activeJob) {
+  if (activeJob && activeJob.status === 'running') {
     return res.json({ status: activeJob.status, username: cleanUsername, message: "Analysis job already in progress..." });
   }
 
