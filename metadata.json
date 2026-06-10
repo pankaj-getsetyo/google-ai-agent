@@ -1,0 +1,6 @@
+{
+  "name": "Creator Travel Intelligence",
+  "description": "Multi-agent research and intelligence engine analyzing creator travel histories and automatically generating tailored premium itineraries.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
