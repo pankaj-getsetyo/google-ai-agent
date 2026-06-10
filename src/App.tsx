@@ -41,7 +41,7 @@ const SHOWCASE_CREATORS = [
 const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE === "true";
 
 export default function App() {
-  const [username, setUsername] = useState("wanderwithsky");
+  const [username, setUsername] = useState("");
   const [status, setStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<AgentLog[]>([]);
@@ -49,6 +49,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'persona' | 'history' | 'map' | 'itineraries' | 'agentSwarm' | 'architecture'>('persona');
   const [activeLocation, setActiveLocation] = useState<MapCoordinates | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [generateItinerary, setGenerateItinerary] = useState(true);
   const [selectedTraceIndex, setSelectedTraceIndex] = useState<number>(0);
 
   // Poll intervals
@@ -61,10 +62,12 @@ export default function App() {
           const res = await fetch(`/api/analysis-status?username=${encodeURIComponent(username)}`);
           if (res.ok) {
             const data = await res.json();
-            
-            // Sync status and logs
-            setLogs(data.logs || []);
-            
+
+            // Sync logs only if response has them
+            if (data.logs?.length) {
+              setLogs(data.logs);
+            }
+
             if (data.status === 'completed') {
               setStatus('completed');
               setDossier(data.dossier);
@@ -96,7 +99,7 @@ export default function App() {
   }, [status, username]);
 
 
-  const handleAnalyze = async (targetUsername: string = username) => {
+  const handleAnalyze = async (targetUsername: string = username, forceRefresh: boolean = false) => {
     if (!targetUsername.trim()) return;
 
     setErrorText(null);
@@ -110,7 +113,7 @@ export default function App() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: targetUsername })
+        body: JSON.stringify({ username: targetUsername, forceRefresh, generateItinerary })
       });
 
       if (!res.ok) {
@@ -248,6 +251,23 @@ export default function App() {
             </button>
           </div>
 
+          {/* Itinerary generation toggle */}
+          <div className="flex items-center justify-center gap-2.5">
+            <button
+              onClick={() => setGenerateItinerary(!generateItinerary)}
+              className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${generateItinerary ? 'bg-brass-400' : 'bg-stone-700'}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${generateItinerary ? 'left-[18px]' : 'left-0.5'}`} />
+            </button>
+            <span className="text-[11px] text-stone-400">Generate bookable itineraries</span>
+            <div className="relative group">
+              <Info className="w-3.5 h-3.5 text-stone-600 cursor-help" strokeWidth={1.5} />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-stone-800 border border-white/[0.08] rounded-xl text-[11px] text-stone-300 w-52 leading-relaxed opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none">
+                When enabled, creates a complete bookable itinerary on GetSetYo for each recommended destination — with hotels, activities, and pricing.
+              </div>
+            </div>
+          </div>
+
           {/* Showcase Preset Triggers */}
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="text-[11px] text-stone-500 mr-1">Try an example</span>
@@ -290,29 +310,39 @@ export default function App() {
                 
                 {/* Result Control Tab deck */}
                 <div className="flex flex-col gap-5 animate-rise">
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={dossier.creatorProfile.profilePicUrl}
-                      alt={dossier.creatorProfile.fullName}
-                      referrerPolicy="no-referrer"
-                      className="w-14 h-14 rounded-full object-cover ring-1 ring-white/10"
-                    />
-                    <div>
-                      <h3 className="font-display text-xl font-medium text-stone-50 leading-tight">
-                        {dossier.creatorProfile.fullName}
-                      </h3>
-                      <div className="flex items-center gap-2.5 text-xs text-stone-500 mt-1">
-                        <span className="text-stone-400">@{dossier.instagramUsername}</span>
-                        <span className="w-1 h-1 rounded-full bg-stone-700" />
-                        <span>{dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
-                        {DEBUG_MODE && (
-                          <>
-                            <span className="w-1 h-1 rounded-full bg-stone-700" />
-                            <span>Confidence {Math.round((dossier.travelPersona?.confidence || 0) * 100)}%</span>
-                          </>
-                        )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <img
+                        src={dossier.creatorProfile.profilePicUrl}
+                        alt={dossier.creatorProfile.fullName}
+                        referrerPolicy="no-referrer"
+                        className="w-14 h-14 rounded-full object-cover ring-1 ring-white/10"
+                      />
+                      <div>
+                        <h3 className="font-display text-xl font-medium text-stone-50 leading-tight">
+                          {dossier.creatorProfile.fullName}
+                        </h3>
+                        <div className="flex items-center gap-2.5 text-xs text-stone-500 mt-1">
+                          <span className="text-stone-400">@{dossier.instagramUsername}</span>
+                          <span className="w-1 h-1 rounded-full bg-stone-700" />
+                          <span>{dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
+                          {DEBUG_MODE && (
+                            <>
+                              <span className="w-1 h-1 rounded-full bg-stone-700" />
+                              <span>Confidence {Math.round((dossier.travelPersona?.confidence || 0) * 100)}%</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {status === 'completed' && (
+                      <button
+                        onClick={() => handleAnalyze(dossier.instagramUsername, true)}
+                        className="text-xs px-4 py-2 rounded-full border border-white/[0.08] bg-white/[0.03] text-stone-400 hover:text-stone-200 hover:border-brass-400/30 transition-all"
+                      >
+                        Re-analyze
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-1 border-b border-white/[0.06] pb-px">

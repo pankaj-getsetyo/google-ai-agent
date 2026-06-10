@@ -106,11 +106,15 @@ class RedisCache {
     return entry.data;
   }
 
-  set(key: string, value: any, ttlSeconds: number = 2592000): void { // 30 Days default
+  set(key: string, value: any, ttlSeconds: number = 2592000): void {
     if (!this.enabled) return;
     const expiresAt = Date.now() + (ttlSeconds * 1000);
     this.store.set(key, { data: value, expiresAt });
     console.log(`[Redis] Saved key: ${key} with TTL: ${ttlSeconds}s`);
+  }
+
+  delete(key: string): void {
+    this.store.delete(key);
   }
 }
 
@@ -472,7 +476,7 @@ const detectionAgent = new TaskAgent({
 
       Based strictly on the real biography, captions, hashtags, mentions and locations above, produce a travel
       intelligence analysis:
-      - Identify 2 to 3 visited destinations actually evidenced in the real content (with visitCount, source evidence quoting/paraphrasing the real captions or locations, and confidence). If the real content has little travel signal, infer conservatively and lower the confidence.
+      - Identify ALL visited destinations actually evidenced in the real content — there is no limit, include every destination you can find evidence for (with visitCount, source evidence quoting/paraphrasing the real captions or locations, and confidence). If the real content has little travel signal, infer conservatively and lower the confidence.
       - Define travel persona: budgetProfile ('Budget', 'Mid-range', or 'Luxury'), travelStyle ('Relaxed', 'Adventure', 'Immersive', or 'Fast-paced'), travellerType ('Solo', 'Couple', 'Group', 'Family'), activityPreferences, travelFrequency ('High', 'Medium', 'Low').
       - Generate exactly 5 targeted recommendations with category: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'. Give a detailed score (0 to 100) and reasoning grounded in the real content for each.
       - Formulate 5 custom travel prompts for the GetSetYo Itinerary API (one per recommendation).
@@ -634,7 +638,8 @@ const itineraryAgent = new TaskAgent({
     const recommendations: TravelRecommendation[] = state.ai_recommendations;
     const prompts: ItineraryPrompt[] = state.ai_prompts;
 
-    if (!GENERATE_ITINERARY) {
+    const shouldGenerate = state._generateItinerary !== undefined ? state._generateItinerary : GENERATE_ITINERARY;
+    if (!shouldGenerate) {
       log(`Preparing ${recommendations.length} trip itineraries...`);
       const itineraries: GetSetYoItinerary[] = recommendations.map(r => ({
         destination: r.destination,
@@ -849,7 +854,7 @@ function buildPartialDossier(state: Record<string, any>): Partial<CreatorIntelli
 }
 
 // --- GOOGLE ADK: RUNNER-BACKED AGENT WORKER ---
-async function runAgentWorker(username: string): Promise<void> {
+async function runAgentWorker(username: string, shouldGenerateItinerary: boolean = GENERATE_ITINERARY): Promise<void> {
   const job = activeJobs.get(username);
   if (!job) return;
 
@@ -857,7 +862,7 @@ async function runAgentWorker(username: string): Promise<void> {
     const session = await adkSessionService.createSession({
       appName: 'creator-travel-intel',
       userId: username,
-      state: { username, _logs: [] as AgentLog[], _agentIndex: 0 }
+      state: { username, _logs: [] as AgentLog[], _agentIndex: 0, _generateItinerary: shouldGenerateItinerary }
     });
 
     const sessionId = session.id;
@@ -947,12 +952,19 @@ async function fetchItineraryDetails(packageDealId: number | string): Promise<Pa
 
 // POST trigger analysis
 app.post("/api/analyze", (req, res) => {
-  const { username } = req.body;
+  const { username, forceRefresh, generateItinerary: genItinParam } = req.body;
   if (!username || username.trim() === "") {
     return res.status(400).json({ error: "username parameter is required" });
   }
 
   const cleanUsername = username.trim().replace(/^@/, "");
+  const shouldGenerateItinerary = genItinParam !== undefined ? genItinParam : GENERATE_ITINERARY;
+
+  if (forceRefresh) {
+    redis.delete(`creator-analysis:${cleanUsername}`);
+    redis.delete(`creator-itineraries:${cleanUsername}`);
+    activeJobs.delete(cleanUsername);
+  }
 
   // Check Redis Cache
   const cachedDossier = redis.get(`creator-analysis:${cleanUsername}`);
@@ -991,7 +1003,7 @@ app.post("/api/analyze", (req, res) => {
   };
 
   activeJobs.set(cleanUsername, newJob);
-  runAgentWorker(cleanUsername); // run in background non-blocking
+  runAgentWorker(cleanUsername, shouldGenerateItinerary);
 
   res.json({
     status: 'running',
