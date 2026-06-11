@@ -978,14 +978,15 @@ function MainApp() {
                       ))}
                     </div>
                     {dossier.visitedDestinations.length > 5 && (
-                      <button
-                        onClick={() => setPlacesExpanded(!placesExpanded)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 text-xs text-stone-500 hover:text-brand-500 border-t border-stone-200 transition-colors cursor-pointer"
-                      >
+                      <div className="flex items-center gap-3 pt-1">
                         <span className="flex-1 h-px bg-stone-200" />
-                        <span>{placesExpanded ? `Collapse` : `Show all ${dossier.visitedDestinations.length} places`}</span>
-                        <span className="flex-1 h-px bg-stone-200" />
-                      </button>
+                        <button
+                          onClick={() => setPlacesExpanded(!placesExpanded)}
+                          className="text-xs px-4 py-1.5 rounded-full bg-brand-500 text-white hover:bg-brand-600 transition-colors cursor-pointer shrink-0"
+                        >
+                          {placesExpanded ? 'Show less' : `Show all ${dossier.visitedDestinations.length} places`}
+                        </button>
+                      </div>
                     )}
                 </div>
 
