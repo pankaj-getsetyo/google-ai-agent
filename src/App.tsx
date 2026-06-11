@@ -244,18 +244,65 @@ function SharedProfile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {dossier.recommendations.map(rec => {
                 const itinerary = (dossier.generatedItineraries || []).find(i => i.destination === rec.destination);
-                const productUrl = itinerary?.productUrl && itinerary.productUrl.length > 0 && itinerary.packageDealId && itinerary.packageDealId !== 0
-                  ? itinerary.productUrl
-                  : `https://getsetyo.com/search?q=${encodeURIComponent(rec.destination)}`;
+                const hasLink = itinerary?.productUrl && itinerary.productUrl.length > 0 && itinerary.packageDealId && itinerary.packageDealId !== 0;
+                const isPending = !hasLink;
+                const isGenerating = itinerary?.status === 'GENERATING';
                 return (
                   <div key={rec.destination} className="bg-white p-5 rounded-xl border border-stone-200 space-y-3">
                     <span className="eyebrow text-brand-500">{rec.category.replace(' Destination', '')}</span>
                     <h3 className="font-display text-xl text-stone-900">{rec.destination}</h3>
                     <p className="text-xs text-stone-500">{rec.country}</p>
                     <p className="text-sm text-stone-600 leading-relaxed">{rec.reason}</p>
-                    <a href={productUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:text-brand-600 font-medium flex items-center gap-1.5 pt-2">
-                      View itinerary <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                    </a>
+                    <div className="pt-2">
+                      {hasLink ? (
+                        <a href={itinerary!.productUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:text-brand-600 font-medium flex items-center gap-1.5">
+                          View itinerary <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
+                        </a>
+                      ) : isGenerating ? (
+                        <span className="text-sm text-brand-400 font-medium flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
+                          Generating...
+                        </span>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            setDossier(prev => {
+                              if (!prev) return prev;
+                              const itins = [...(prev.generatedItineraries || [])];
+                              const idx = itins.findIndex(i => i.destination === rec.destination);
+                              if (idx >= 0) itins[idx] = { ...itins[idx], status: 'GENERATING' };
+                              return { ...prev, generatedItineraries: itins };
+                            });
+                            try {
+                              const res = await fetch('/api/generate-itinerary', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username: dossier.instagramUsername, destination: rec.destination })
+                              });
+                              const updated = await res.json();
+                              setDossier(prev => {
+                                if (!prev) return prev;
+                                const itins = [...(prev.generatedItineraries || [])];
+                                const idx = itins.findIndex(i => i.destination === rec.destination);
+                                if (idx >= 0) itins[idx] = { ...itins[idx], ...updated };
+                                return { ...prev, generatedItineraries: itins };
+                              });
+                            } catch {
+                              setDossier(prev => {
+                                if (!prev) return prev;
+                                const itins = [...(prev.generatedItineraries || [])];
+                                const idx = itins.findIndex(i => i.destination === rec.destination);
+                                if (idx >= 0) itins[idx] = { ...itins[idx], status: 'FAILED' };
+                                return { ...prev, generatedItineraries: itins };
+                              });
+                            }
+                          }}
+                          className="text-sm text-brand-500 hover:text-brand-600 font-medium flex items-center gap-1.5 cursor-pointer"
+                        >
+                          View itinerary <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -385,9 +432,9 @@ function MainApp() {
     setActiveTab('persona');
 
     setTimeout(() => {
-      const el = sectionRefs.current['results-top'];
+      const el = document.getElementById('trigger-section');
       if (el) {
-        const top = el.getBoundingClientRect().top + window.scrollY - 32;
+        const top = el.getBoundingClientRect().top + window.scrollY;
         window.scrollTo({ top, behavior: 'smooth' });
       }
     }, 100);
@@ -466,10 +513,10 @@ function MainApp() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6" id="dashboard-layout">
-        
+      <main className={`flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6 ${status === 'idle' ? 'justify-center min-h-[calc(100vh-80px)]' : ''}`} id="dashboard-layout">
+
         {/* Hero + input */}
-        <section className="flex flex-col items-center text-center gap-7 pt-8 pb-4 md:pt-14 md:pb-8" id="trigger-section">
+        <section className={`flex flex-col items-center text-center gap-7 ${status === 'idle' ? 'py-0' : 'pt-8 pb-4 md:pt-14 md:pb-8'}`} id="trigger-section">
           <div className="max-w-2xl flex flex-col items-center gap-3">
             <h2 className="font-display text-3xl md:text-4xl font-light text-stone-900 leading-[1.15]">
               Turn your Instagram into your <span className="italic text-brand-500">travel profile</span> & bucket list
@@ -571,12 +618,39 @@ function MainApp() {
           )}
         </section>
 
-        {/* Dynamic Interactive Panel */}
-        <div ref={el => { sectionRefs.current['results-top'] = el; }} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Left panel: Swarm execution logs always visible if triggered */}
-          <div className="lg:col-span-1 flex flex-col gap-6">
+        {/* Dynamic Interactive Panel — only visible after analysis starts */}
+        {status !== 'idle' && !dossier && (
+          <div ref={el => { sectionRefs.current['results-top'] = el; }} className="max-w-xl mx-auto w-full space-y-3">
+            {status === 'running' && (
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-brand-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                </div>
+                <span className="text-xs text-stone-500 shrink-0">{progress}%</span>
+              </div>
+            )}
             <AgentLiveTerminal logs={logs} status={status} />
+          </div>
+        )}
+
+        {status !== 'idle' && dossier && (
+        <div ref={el => { sectionRefs.current['results-top'] = el; }} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* Left panel: Live activity logs — sticky */}
+          <div className="lg:col-span-1">
+            <div className="lg:sticky lg:top-20 space-y-3">
+              {status === 'running' && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-brand-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                  </div>
+                  <span className="text-xs text-stone-500 shrink-0">{progress}%</span>
+                </div>
+              )}
+              <div className="max-h-[calc(100vh-120px)] overflow-hidden">
+                <AgentLiveTerminal logs={logs} status={status} />
+              </div>
+            </div>
           </div>
 
           {/* Right/Major panels: Results view */}
@@ -633,7 +707,7 @@ function MainApp() {
                           onClick={() => handleAnalyze(dossier.instagramUsername, true)}
                           className="text-xs px-3 sm:px-4 py-2 rounded-full border border-stone-200 bg-stone-50 text-stone-500 hover:text-stone-900 hover:border-brand-400/30 transition-all cursor-pointer"
                         >
-                          Re-analyze
+                          Regenerate
                         </button>
                       </div>
                     )}
@@ -684,7 +758,7 @@ function MainApp() {
                             </div>
                           </div>
 
-                          <div className="w-full md:w-64 shrink-0 bg-white p-5 border border-stone-200 rounded-2xl space-y-4">
+                          <div className="w-full md:w-72 shrink-0 bg-white p-5 border border-stone-200 rounded-2xl space-y-4">
                             <div className="flex items-center gap-2 pb-3 border-b border-stone-200">
                               <Sliders className="w-4 h-4 text-brand-500" strokeWidth={1.5} />
                               <span className="text-xs font-medium text-stone-700 tracking-wide">At a glance</span>
@@ -696,14 +770,10 @@ function MainApp() {
                                 { label: 'Budget', value: dossier.travelPersona.budgetProfile, accent: true },
                                 { label: 'Travels as', value: dossier.travelPersona.travellerType },
                                 { label: 'Frequency', value: dossier.travelPersona.travelFrequency },
-                                ...(dossier.travelPersona.hotelPreference ? [{ label: 'Stays', value: dossier.travelPersona.hotelPreference, truncate: true }] : [])
                               ].filter(row => row.value).map((row) => (
                                 <div key={row.label} className="flex justify-between items-center gap-3">
                                   <span className="text-stone-500">{row.label}</span>
-                                  <span
-                                    className={`font-medium text-right ${row.accent ? 'text-brand-500' : 'text-stone-800'} ${row.truncate ? 'truncate max-w-[130px]' : ''}`}
-                                    title={row.truncate ? String(row.value) : undefined}
-                                  >
+                                  <span className={`font-medium text-right ${row.accent ? 'text-brand-500' : 'text-stone-800'}`}>
                                     {row.value}
                                   </span>
                                 </div>
@@ -712,13 +782,13 @@ function MainApp() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           {dossier.travelPersona.activityPreferences?.length > 0 && (
-                            <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
-                              <span className="eyebrow text-stone-500">Things you love doing</span>
+                            <div className="bg-white p-5 rounded-2xl border border-stone-200 space-y-3">
+                              <span className="eyebrow text-stone-500">Activities</span>
                               <div className="flex flex-wrap gap-2">
                                 {dossier.travelPersona.activityPreferences.map((act) => (
-                                  <span key={act} className="text-xs px-3.5 py-1.5 rounded-full bg-stone-50 border border-stone-200 text-stone-700">
+                                  <span key={act} className="text-xs px-3 py-1 rounded-full bg-stone-50 border border-stone-200 text-stone-700">
                                     {act}
                                   </span>
                                 ))}
@@ -727,11 +797,16 @@ function MainApp() {
                           )}
 
                           {dossier.travelPersona.foodPreference && (
-                            <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
-                              <span className="eyebrow text-stone-500">Food you gravitate to</span>
-                              <p className="text-sm text-stone-700 leading-relaxed font-display font-light italic">
-                                {dossier.travelPersona.foodPreference}
-                              </p>
+                            <div className="bg-white p-5 rounded-2xl border border-stone-200 space-y-3">
+                              <span className="eyebrow text-stone-500">Food preference</span>
+                              <p className="text-sm text-stone-700 leading-relaxed">{dossier.travelPersona.foodPreference}</p>
+                            </div>
+                          )}
+
+                          {dossier.travelPersona.hotelPreference && (
+                            <div className="bg-white p-5 rounded-2xl border border-stone-200 space-y-3">
+                              <span className="eyebrow text-stone-500">Where they stay</span>
+                              <p className="text-sm text-stone-700 leading-relaxed">{dossier.travelPersona.hotelPreference}</p>
                             </div>
                           )}
                         </div>
@@ -744,7 +819,15 @@ function MainApp() {
                 </div>
 
                 {/* INTERACTIVE TRAVEL MAP */}
-                <div ref={el => { sectionRefs.current['map'] = el; }} data-section="map" className="h-[500px]" id="tab-map">
+                <div ref={el => { sectionRefs.current['map'] = el; }} data-section="map" className="h-[500px] relative" id="tab-map">
+                  {allMapPins.length === 0 && status === 'running' && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center">
+                      <div className="bg-white/90 backdrop-blur-sm px-5 py-3 rounded-full border border-stone-200 shadow-sm flex items-center gap-2.5">
+                        <MapPin className="w-4 h-4 text-brand-500 animate-bounce" strokeWidth={1.5} />
+                        <span className="text-sm text-stone-600 font-medium">Finding locations...</span>
+                      </div>
+                    </div>
+                  )}
                   <WorldMap
                     locations={allMapPins}
                     activeLocation={activeLocation}
@@ -1411,20 +1494,10 @@ function MainApp() {
                   </div>
                 )}
               </div>
-            ) : (
-              // Idle layout helper
-              <div className="h-full min-h-[350px] flex flex-col items-center justify-center text-center p-8 bg-white border border-stone-200 rounded-3xl gap-4">
-                <Compass className="w-10 h-10 text-stone-300 animate-spin" strokeWidth={1.25} style={{ animationDuration: '40s' }} />
-                <p className="text-sm text-stone-400 max-w-xs">Enter a handle above to get started</p>
-                <div className="flex items-center gap-4 text-[11px] text-stone-400 mt-2">
-                  <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-brand-400" strokeWidth={1.5} /> Style</span>
-                  <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-brand-400" strokeWidth={1.5} /> Places</span>
-                  <span className="flex items-center gap-1.5"><Plane className="w-3.5 h-3.5 text-brand-400" strokeWidth={1.5} /> Trips</span>
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
+        )}
       </main>
 
       <footer className="border-t border-stone-200 px-5 md:px-10 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-stone-500 select-none mt-auto">

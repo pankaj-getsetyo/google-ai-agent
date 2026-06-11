@@ -305,27 +305,33 @@ async function scrapeInstagramProfile(
   const cleanUsername = extractUsername(username);
   const client = new ApifyClient({ token });
 
-  const detailsInput = {
-    directUrls: [`https://www.instagram.com/${cleanUsername}/`],
-    resultsType: "details",
-    resultsLimit: 1,
-    addParentData: false,
-    searchType: "user",
-    searchLimit: 1,
-  };
-  const detailsRun = await client.actor("shu8hvrXbJbY3Eb9W").call(detailsInput);
-  const { items: detailsItems } = await client.dataset(detailsRun.defaultDatasetId).listItems();
+  const [detailsResult, postsResult] = await Promise.all([
+    (async () => {
+      const run = await client.actor("shu8hvrXbJbY3Eb9W").call({
+        directUrls: [`https://www.instagram.com/${cleanUsername}/`],
+        resultsType: "details",
+        resultsLimit: 1,
+        addParentData: false,
+        searchType: "user",
+        searchLimit: 1,
+      });
+      return client.dataset(run.defaultDatasetId).listItems();
+    })(),
+    (async () => {
+      const run = await client.actor("shu8hvrXbJbY3Eb9W").call({
+        directUrls: [`https://www.instagram.com/${cleanUsername}/`],
+        resultsType: "posts",
+        resultsLimit: 50,
+        addParentData: false,
+        searchType: "user",
+        searchLimit: 1,
+      });
+      return client.dataset(run.defaultDatasetId).listItems();
+    })(),
+  ]);
 
-  const postsInput = {
-    directUrls: [`https://www.instagram.com/${cleanUsername}/`],
-    resultsType: "posts",
-    resultsLimit: 50,
-    addParentData: false,
-    searchType: "user",
-    searchLimit: 1,
-  };
-  const postsRun = await client.actor("shu8hvrXbJbY3Eb9W").call(postsInput);
-  const { items: postItems } = await client.dataset(postsRun.defaultDatasetId).listItems();
+  const detailsItems = detailsResult.items;
+  const postItems = postsResult.items;
 
   if ((!detailsItems || detailsItems.length === 0) && (!postItems || postItems.length === 0)) {
     throw new Error(`Could not find this profile. It may be private or the handle may be incorrect.`);
@@ -523,8 +529,8 @@ const detectionAgent = new TaskAgent({
       - Define travel persona: budgetProfile ('Budget', 'Mid-range', or 'Luxury'), travelStyle ('Relaxed', 'Adventure', 'Immersive', or 'Fast-paced'), travellerType ('Solo', 'Couple', 'Group', 'Family'), activityPreferences, travelFrequency ('High', 'Medium', 'Low').
       - Identify the top travel themes evident in the content (e.g., "Beach & Islands", "Mountains & Trekking", "Cultural Heritage", "Food & Culinary", "Wildlife & Nature", "Urban Exploration", "Spiritual & Wellness", "Road Trips", "Nightlife & Parties", "Photography & Art").
       - Write 2-3 short travel highlights — memorable moments or patterns from the content (e.g., "Explored 3 countries in Southeast Asia in one month", "Frequently visits offbeat hill stations").
-      - Generate exactly 5 targeted recommendations with category: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination'. Give a detailed score (0 to 100) and reasoning grounded in the real content for each.
-      - Formulate 5 custom travel prompts for the GetSetYo Itinerary API (one per recommendation).
+      - Generate exactly 6 targeted recommendations. Each recommendation should have a category from: 'Similar Destination', 'Aspirational Destination', 'Hidden Gem Destination', 'Trending Destination', 'Stretch Destination', 'Offbeat Destination'. Multiple recommendations can share the same category — pick whichever fits best for each destination. Give a detailed score (0 to 100) and reasoning grounded in the real content for each.
+      - Formulate 6 custom travel prompts for the GetSetYo Itinerary API (one per recommendation).
       - Plot coordinate positions (latitude and longitude as numbers) for each visited and recommended destination.
 
       The output must strictly be valid JSON matching this exact structure (do NOT include instagramData or creatorProfile — those come from the real scrape):
