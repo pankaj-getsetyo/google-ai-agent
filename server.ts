@@ -960,9 +960,10 @@ async function runAgentWorker(username: string, shouldGenerateItinerary: boolean
     }
 
     job.status = job.dossier ? 'completed' : 'failed';
+    console.log(`[Pipeline] Analysis for @${username} ${job.status}. Agents: ${job.currentAgentIndex + 1}/10, Logs: ${job.logs.length}`);
 
   } catch (err: any) {
-    console.error("Agent pipeline crashed", err);
+    console.error(`[Pipeline] Analysis for @${username} crashed:`, err.message || err);
     job.status = 'failed';
     const errorLog: AgentLog = {
       id: `failed-${Date.now()}`,
@@ -1023,6 +1024,7 @@ app.post("/api/analyze", async (req, res) => {
   }
 
   const cleanUsername = extractUsername(username);
+  console.log(`[API] Analyze request for @${cleanUsername}${forceRefresh ? ' (force refresh)' : ''}`);
   const shouldGenerateItinerary = genItinParam !== undefined ? genItinParam : GENERATE_ITINERARY;
 
   if (forceRefresh) {

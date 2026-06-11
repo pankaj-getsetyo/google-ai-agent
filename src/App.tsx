@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { 
   Instagram, 
   Search, 
@@ -121,13 +121,13 @@ function SharedProfile() {
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         {/* Profile header */}
         <div className="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5">
-          <h1 className="font-display text-xl sm:text-2xl font-medium text-stone-900 truncate">{dossier.creatorProfile.fullName}</h1>
+          <h1 className="font-display text-xl sm:text-2xl font-medium text-stone-900 truncate">{dossier.creatorProfile?.fullName || dossier.instagramUsername}</h1>
           <div className="flex items-center gap-2 text-xs text-stone-500 mt-1">
             <Instagram className="w-3.5 h-3.5 text-brand-500 shrink-0" strokeWidth={1.5} />
             <span className="truncate">@{dossier.instagramUsername}</span>
             <span className="w-1 h-1 rounded-full bg-stone-300 shrink-0" />
-            <span className="shrink-0">{dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
-            {dossier.creatorProfile.postsCount > 0 && (
+            <span className="shrink-0">{(dossier.creatorProfile?.followersCount || 0).toLocaleString()} followers</span>
+            {(dossier.creatorProfile?.postsCount || 0) > 0 && (
               <>
                 <span className="w-1 h-1 rounded-full bg-stone-300 shrink-0" />
                 <span className="shrink-0">{dossier.creatorProfile.postsCount.toLocaleString()} posts</span>
@@ -318,11 +318,38 @@ function SharedProfile() {
   );
 }
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-canvas flex items-center justify-center">
+          <div className="text-center space-y-4 max-w-sm">
+            <AlertCircle className="w-12 h-12 text-stone-400 mx-auto" strokeWidth={1.25} />
+            <h2 className="font-display text-xl text-stone-800">Something went wrong</h2>
+            <p className="text-sm text-stone-500">An unexpected error occurred. Please try refreshing the page.</p>
+            <button onClick={() => window.location.reload()} className="px-5 py-2 rounded-full bg-brand-500 text-white text-sm hover:bg-brand-600 cursor-pointer">
+              Refresh page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const isSharedProfile = window.location.pathname.startsWith('/profile/');
-  if (isSharedProfile) return <SharedProfile />;
-
-  return <MainApp />;
+  return (
+    <ErrorBoundary>
+      {isSharedProfile ? <SharedProfile /> : <MainApp />}
+    </ErrorBoundary>
+  );
 }
 
 function MainApp() {
