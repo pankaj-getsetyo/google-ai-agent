@@ -125,7 +125,8 @@ class RedisCache {
     if (this.client) {
       try {
         const val = await this.client.get(key);
-        if (!val) return null;
+        if (!val) { console.log(`[Redis] Miss: ${key}`); return null; }
+        console.log(`[Redis] Hit: ${key}`);
         return JSON.parse(val);
       } catch (err) {
         console.error("[Redis] Get error:", err);
@@ -133,8 +134,9 @@ class RedisCache {
       }
     }
     const entry = this.fallback.get(key);
-    if (!entry) return null;
-    if (Date.now() > entry.expiresAt) { this.fallback.delete(key); return null; }
+    if (!entry) { console.log(`[InMemory] Miss: ${key}`); return null; }
+    if (Date.now() > entry.expiresAt) { this.fallback.delete(key); console.log(`[InMemory] Expired: ${key}`); return null; }
+    console.log(`[InMemory] Hit: ${key}`);
     return entry.data;
   }
 
@@ -143,12 +145,14 @@ class RedisCache {
     if (this.client) {
       try {
         await this.client.set(key, JSON.stringify(value), "EX", ttlSeconds);
+        console.log(`[Redis] Saved: ${key} (TTL: ${ttlSeconds}s)`);
       } catch (err) {
         console.error("[Redis] Set error:", err);
       }
       return;
     }
     this.fallback.set(key, { data: value, expiresAt: Date.now() + (ttlSeconds * 1000) });
+    console.log(`[InMemory] Saved: ${key} (TTL: ${ttlSeconds}s)`);
   }
 
   async delete(key: string): Promise<void> {
