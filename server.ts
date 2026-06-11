@@ -582,27 +582,19 @@ const detectionAgent = new TaskAgent({
     const parsed = JSON.parse(cleanText.trim());
     const parsedPersona = parsed.travelPersona || {};
 
-    if (!parsedPersona.budgetProfile || !parsedPersona.travelStyle) {
-      throw new Error("Could not determine travel preferences — the profile may not have enough travel-related content.");
-    }
-
     const travelPersona: TravelPersona = {
-      budgetProfile: parsedPersona.budgetProfile,
-      travelStyle: parsedPersona.travelStyle,
+      budgetProfile: parsedPersona.budgetProfile || "Mid-range",
+      travelStyle: parsedPersona.travelStyle || "Relaxed",
       travellerType: parsedPersona.travellerType || "Solo",
       activityPreferences: Array.isArray(parsedPersona.activityPreferences) ? parsedPersona.activityPreferences : [],
       travelFrequency: parsedPersona.travelFrequency || "Medium",
       confidence: typeof parsedPersona.confidence === "number" ? parsedPersona.confidence : 0,
       hotelPreference: parsedPersona.hotelPreference || "",
       foodPreference: parsedPersona.foodPreference || "",
-      summary: parsedPersona.summary || ""
+      summary: parsedPersona.summary || "This profile doesn't have enough travel-related content to build a detailed travel persona."
     };
 
     const rawDestinations = parsed.visitedDestinations || [];
-    if (rawDestinations.length === 0) {
-      throw new Error("No travel destinations could be identified from this profile's content. The creator may not post travel-related content.");
-    }
-
     const visitedDestinations: VisitedDestination[] = rawDestinations
       .filter((v: any) => v.destination && v.country)
       .map((v: any) => ({
@@ -615,11 +607,13 @@ const detectionAgent = new TaskAgent({
         timeline: v.timeline || ""
       }));
 
-    const rawRecommendations = parsed.recommendations || [];
-    if (rawRecommendations.length === 0) {
-      throw new Error("Could not generate destination recommendations — not enough travel signals in this profile.");
+    if (visitedDestinations.length === 0) {
+      log(`No travel destinations found in this profile's content. Showing basic profile.`);
+    } else {
+      log(`Identified ${visitedDestinations.length} destinations across ${[...new Set(visitedDestinations.map(v => v.country))].length} countries.`);
     }
 
+    const rawRecommendations = parsed.recommendations || [];
     const recommendations: TravelRecommendation[] = rawRecommendations
       .filter((r: any) => r.destination && r.country)
       .map((r: any) => ({
@@ -630,6 +624,10 @@ const detectionAgent = new TaskAgent({
         reason: r.reason || ""
       }));
 
+    if (recommendations.length > 0) {
+      log(`Generated ${recommendations.length} destination recommendations.`);
+    }
+
     const rawPrompts = parsed.prompts || [];
     const prompts: ItineraryPrompt[] = rawPrompts
       .filter((p: any) => p.destination && p.prompt)
@@ -637,13 +635,6 @@ const detectionAgent = new TaskAgent({
         destination: p.destination,
         prompt: p.prompt
       }));
-
-    if (prompts.length === 0) {
-      throw new Error("Could not create itinerary briefs — not enough information to generate personalized trips.");
-    }
-
-    log(`Identified ${visitedDestinations.length} destinations across ${[...new Set(visitedDestinations.map(v => v.country))].length} countries.`);
-    log(`Generated ${recommendations.length} destination recommendations.`);
 
     const countriesVisited: string[] = parsed.countriesVisited || [...new Set(visitedDestinations.map(v => v.country))];
     const travelThemes: string[] = parsed.travelThemes || [];
