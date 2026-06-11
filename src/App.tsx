@@ -244,18 +244,18 @@ function SharedProfile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {dossier.recommendations.map(rec => {
                 const itinerary = (dossier.generatedItineraries || []).find(i => i.destination === rec.destination);
-                const hasLink = itinerary?.productUrl && itinerary.productUrl.length > 0 && itinerary.packageDealId && itinerary.packageDealId !== 0;
+                const productUrl = itinerary?.productUrl && itinerary.productUrl.length > 0 && itinerary.packageDealId && itinerary.packageDealId !== 0
+                  ? itinerary.productUrl
+                  : `https://getsetyo.com/search?q=${encodeURIComponent(rec.destination)}`;
                 return (
                   <div key={rec.destination} className="bg-white p-5 rounded-xl border border-stone-200 space-y-3">
                     <span className="eyebrow text-brand-500">{rec.category.replace(' Destination', '')}</span>
                     <h3 className="font-display text-xl text-stone-900">{rec.destination}</h3>
                     <p className="text-xs text-stone-500">{rec.country}</p>
                     <p className="text-sm text-stone-600 leading-relaxed">{rec.reason}</p>
-                    {hasLink && (
-                      <a href={itinerary!.productUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:text-brand-600 font-medium flex items-center gap-1.5 pt-2">
-                        View itinerary <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                      </a>
-                    )}
+                    <a href={productUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-500 hover:text-brand-600 font-medium flex items-center gap-1.5 pt-2">
+                      View itinerary <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
+                    </a>
                   </div>
                 );
               })}
@@ -880,34 +880,6 @@ function MainApp() {
                         <h4 className="font-display text-xl font-light text-stone-900">My bucket list</h4>
                         <p className="text-xs text-stone-500 mt-0.5">Tailored trips you can open and book on GetSetYo</p>
                       </div>
-                      {(dossier.generatedItineraries || []).some(it => it.status === 'PENDING') && (
-                        <button
-                          onClick={async () => {
-                            const pending = (dossier.generatedItineraries || []).filter(it => it.status === 'PENDING');
-                            for (const it of pending) {
-                              try {
-                                const res = await fetch('/api/generate-itinerary', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ username: dossier.instagramUsername, destination: it.destination })
-                                });
-                                const updated = await res.json();
-                                setDossier(prev => {
-                                  if (!prev) return prev;
-                                  const itins = [...(prev.generatedItineraries || [])];
-                                  const idx = itins.findIndex(i => i.destination === it.destination);
-                                  if (idx >= 0) itins[idx] = { ...itins[idx], ...updated };
-                                  return { ...prev, generatedItineraries: itins };
-                                });
-                              } catch {}
-                            }
-                          }}
-                          className="text-xs px-4 py-2 rounded-full bg-brand-500 text-white hover:bg-brand-600 transition-colors cursor-pointer flex items-center gap-1.5"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          Generate all itineraries
-                        </button>
-                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -994,7 +966,7 @@ function MainApp() {
                                     className="text-sm text-brand-500 hover:text-brand-600 font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                                   >
                                     <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
-                                    Generate itinerary
+                                    View itinerary
                                   </button>
                                 </>
                               ) : isGenerating ? (
