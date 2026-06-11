@@ -30,9 +30,9 @@ import WorldMap from "./components/WorldMap";
 import AgentLiveTerminal from "./components/AgentLiveTerminal";
 
 const SHOWCASE_CREATORS = [
-  { username: "tanyakhanijow", label: "🌍 Explorer", hint: "Tanya Khanijow" },
-  { username: "brindasharma", label: "✈️ Travel Vlogger", hint: "Brinda Sharma" },
-  { username: "ilunarang", label: "🏖️ Wanderlust", hint: "Luna Rang" },
+  { username: "roveringmayank", label: "roveringmayank" },
+  { username: "tanyakhanijow", label: "tanyakhanijow" },
+  { username: "khan.isa", label: "khan.isa" },
 ];
 
 const FEATURED_PROFILES = [
@@ -166,6 +166,13 @@ function SharedProfile() {
           </section>
         )}
 
+        {/* Map */}
+        {allMapPins.length > 0 && (
+          <section className="h-[500px]">
+            <WorldMap locations={allMapPins} activeLocation={null} onSelectLocation={() => {}} />
+          </section>
+        )}
+
         {/* Countries, Themes, Highlights */}
         {(dossier.countriesVisited?.length > 0 || dossier.travelThemes?.length > 0 || dossier.travelHighlights?.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -227,13 +234,6 @@ function SharedProfile() {
                 </div>
               ))}
             </div>
-          </section>
-        )}
-
-        {/* Map */}
-        {allMapPins.length > 0 && (
-          <section>
-            <WorldMap locations={allMapPins} activeLocation={null} onSelectLocation={() => {}} />
           </section>
         )}
 
@@ -519,7 +519,7 @@ function MainApp() {
         <section className={`flex flex-col items-center text-center gap-7 ${status === 'idle' ? 'py-0' : 'pt-8 pb-4 md:pt-14 md:pb-8'}`} id="trigger-section">
           <div className="max-w-2xl flex flex-col items-center gap-3">
             <h2 className="font-display text-3xl md:text-4xl font-light text-stone-900 leading-[1.15]">
-              Turn your Instagram into your <span className="italic text-brand-500">travel profile</span> & bucket list
+              Turn your Instagram into your<br /><span className="italic text-brand-500">travel profile</span> & bucket list
             </h2>
             <p className="text-sm text-stone-500">
               Enter a handle. Get travel style, visited places & personalized recommendations.
@@ -591,12 +591,13 @@ function MainApp() {
                 key={c.username}
                 onClick={() => handleShowcaseSelect(c.username)}
                 disabled={status === 'running'}
-                className={`text-xs px-3.5 py-1.5 rounded-full border transition-all flex items-center gap-1.5 ${
+                className={`text-xs px-3.5 py-1.5 rounded-full border transition-all flex items-center gap-1.5 cursor-pointer ${
                   username === c.username
                     ? 'bg-brand-50 border-brand-400 text-brand-600'
-                    : 'bg-white border-stone-200 text-stone-500 hover:text-stone-900 hover:border-brand-300'
+                    : 'bg-white border-stone-200 text-stone-600 hover:text-stone-900 hover:border-brand-300 hover:shadow-sm'
                 }`}
               >
+                <Instagram className="w-3 h-3" strokeWidth={1.5} />
                 <span>{c.label}</span>
               </button>
             ))}
@@ -743,15 +744,6 @@ function MainApp() {
                       <>
                         <div className="bg-white rounded-3xl border border-stone-200 p-7 flex flex-col md:flex-row gap-7">
                           <div className="flex-1 space-y-5">
-                            <div>
-                              <span className="eyebrow text-brand-500">Your bio</span>
-                              <p className="text-stone-700 text-[15px] italic font-display font-light mt-2 leading-relaxed">
-                                "{dossier.creatorProfile.biography || 'No bio available'}"
-                              </p>
-                            </div>
-
-                            <div className="h-px bg-stone-200" />
-
                             <div>
                               <span className="eyebrow text-stone-500">Your travel style</span>
                               <p className="text-stone-700 text-sm mt-2 leading-relaxed">{dossier.travelPersona.summary || 'Analyzing travel style...'}</p>
