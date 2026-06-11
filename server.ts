@@ -1275,6 +1275,8 @@ async function startServer() {
     console.log("Vite Development Server middleware mounted.");
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    const assetsPath = path.join(process.cwd(), 'assets');
+    app.use('/assets', express.static(assetsPath));
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

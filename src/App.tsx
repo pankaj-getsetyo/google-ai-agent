@@ -120,17 +120,23 @@ function SharedProfile() {
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         {/* Profile header */}
-        <div className="flex items-center gap-4">
-          <img
-            src={dossier.creatorProfile.profilePicUrl}
-            alt={dossier.creatorProfile.fullName}
-            referrerPolicy="no-referrer"
-            className="w-16 h-16 rounded-full object-cover ring-2 ring-stone-200"
-          />
-          <div>
-            <h1 className="font-display text-2xl font-medium text-stone-900">{dossier.creatorProfile.fullName}</h1>
-            <p className="text-sm text-stone-500">@{dossier.instagramUsername} · {dossier.creatorProfile.followersCount.toLocaleString()} followers</p>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5">
+          <h1 className="font-display text-xl sm:text-2xl font-medium text-stone-900 truncate">{dossier.creatorProfile.fullName}</h1>
+          <div className="flex items-center gap-2 text-xs text-stone-500 mt-1">
+            <Instagram className="w-3.5 h-3.5 text-brand-500 shrink-0" strokeWidth={1.5} />
+            <span className="truncate">@{dossier.instagramUsername}</span>
+            <span className="w-1 h-1 rounded-full bg-stone-300 shrink-0" />
+            <span className="shrink-0">{dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
+            {dossier.creatorProfile.postsCount > 0 && (
+              <>
+                <span className="w-1 h-1 rounded-full bg-stone-300 shrink-0" />
+                <span className="shrink-0">{dossier.creatorProfile.postsCount.toLocaleString()} posts</span>
+              </>
+            )}
           </div>
+          {dossier.creatorProfile.biography && (
+            <p className="text-xs text-stone-500 mt-2 leading-relaxed line-clamp-2">{dossier.creatorProfile.biography}</p>
+          )}
         </div>
 
         {/* Travel Style */}
@@ -158,6 +164,55 @@ function SharedProfile() {
               </div>
             )}
           </section>
+        )}
+
+        {/* Countries, Themes, Highlights */}
+        {(dossier.countriesVisited?.length > 0 || dossier.travelThemes?.length > 0 || dossier.travelHighlights?.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {dossier.countriesVisited?.length > 0 && (
+              <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-brand-500" strokeWidth={1.5} />
+                  <span className="text-xs font-medium text-stone-800">Countries visited</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 font-medium">{dossier.countriesVisited.length}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {dossier.countriesVisited.map(country => (
+                    <span key={country} className="text-xs px-2.5 py-1 rounded-full bg-stone-100 text-stone-700 border border-stone-200">{country}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {dossier.travelThemes?.length > 0 && (
+              <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-brand-500" strokeWidth={1.5} />
+                  <span className="text-xs font-medium text-stone-800">Travel themes</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {dossier.travelThemes.map(theme => (
+                    <span key={theme} className="text-xs px-2.5 py-1 rounded-full bg-brand-50 text-brand-600 border border-brand-200">{theme}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {dossier.travelHighlights?.length > 0 && (
+              <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-brand-500" strokeWidth={1.5} />
+                  <span className="text-xs font-medium text-stone-800">Highlights</span>
+                </div>
+                <ul className="space-y-2">
+                  {dossier.travelHighlights.map((h, i) => (
+                    <li key={i} className="text-xs text-stone-600 leading-relaxed flex items-start gap-2">
+                      <span className="mt-1.5 w-1 h-1 rounded-full bg-brand-400 shrink-0" />
+                      {h}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Places Visited */}
@@ -252,7 +307,7 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    const sectionKeys = ['persona', 'history', 'map', 'itineraries'];
+    const sectionKeys = ['persona', 'map', 'history', 'itineraries'];
     const observer = new IntersectionObserver(
       (entries) => {
         if (isScrollingToSection.current) return;
@@ -531,33 +586,29 @@ function MainApp() {
                 
                 {/* Result Control Tab deck */}
                 <div className="flex flex-col gap-5 animate-rise">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <img
-                        src={dossier.creatorProfile.profilePicUrl}
-                        alt={dossier.creatorProfile.fullName}
-                        referrerPolicy="no-referrer"
-                        className="w-14 h-14 rounded-full object-cover ring-1 ring-stone-200"
-                      />
-                      <div>
-                        <h3 className="font-display text-xl font-medium text-stone-900 leading-tight">
-                          {dossier.creatorProfile.fullName}
-                        </h3>
-                        <div className="flex items-center gap-2.5 text-xs text-stone-500 mt-1">
-                          <span className="text-stone-500">@{dossier.instagramUsername}</span>
-                          <span className="w-1 h-1 rounded-full bg-stone-300" />
-                          <span>{dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
-                          {DEBUG_MODE && (
-                            <>
-                              <span className="w-1 h-1 rounded-full bg-stone-300" />
-                              <span>Confidence {Math.round((dossier.travelPersona?.confidence || 0) * 100)}%</span>
-                            </>
-                          )}
-                        </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-stone-200 p-4 sm:p-5">
+                    <div className="min-w-0">
+                      <h3 className="font-display text-lg sm:text-xl font-medium text-stone-900 leading-tight truncate">
+                        {dossier.creatorProfile.fullName}
+                      </h3>
+                      <div className="flex items-center gap-2 text-xs text-stone-500 mt-1">
+                        <Instagram className="w-3.5 h-3.5 text-brand-500 shrink-0" strokeWidth={1.5} />
+                        <span className="truncate">@{dossier.instagramUsername}</span>
+                        <span className="w-1 h-1 rounded-full bg-stone-300 shrink-0" />
+                        <span className="shrink-0">{dossier.creatorProfile.followersCount.toLocaleString()} followers</span>
+                        {dossier.creatorProfile.postsCount > 0 && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-stone-300 shrink-0" />
+                            <span className="shrink-0">{dossier.creatorProfile.postsCount.toLocaleString()} posts</span>
+                          </>
+                        )}
                       </div>
+                      {dossier.creatorProfile.biography && (
+                        <p className="text-xs text-stone-500 mt-2 leading-relaxed line-clamp-2">{dossier.creatorProfile.biography}</p>
+                      )}
                     </div>
                     {status === 'completed' && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={async () => {
                             try {
@@ -572,14 +623,15 @@ function MainApp() {
                               }
                             } catch {}
                           }}
-                          className="text-xs px-4 py-2 rounded-full bg-brand-500 text-white hover:bg-brand-600 transition-all cursor-pointer flex items-center gap-1.5"
+                          className="text-xs px-3 sm:px-4 py-2 rounded-full bg-brand-500 text-white hover:bg-brand-600 transition-all cursor-pointer flex items-center gap-1.5"
                         >
                           <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          Share profile
+                          <span className="hidden sm:inline">Share profile</span>
+                          <span className="sm:hidden">Share</span>
                         </button>
                         <button
                           onClick={() => handleAnalyze(dossier.instagramUsername, true)}
-                          className="text-xs px-4 py-2 rounded-full border border-stone-200 bg-stone-50 text-stone-500 hover:text-stone-900 hover:border-brand-400/30 transition-all cursor-pointer"
+                          className="text-xs px-3 sm:px-4 py-2 rounded-full border border-stone-200 bg-stone-50 text-stone-500 hover:text-stone-900 hover:border-brand-400/30 transition-all cursor-pointer"
                         >
                           Re-analyze
                         </button>
@@ -590,8 +642,8 @@ function MainApp() {
                   <div ref={tabBarRef} className="flex flex-wrap gap-1 border-b border-stone-200 pb-px sticky top-0 bg-white/95 backdrop-blur-sm z-10">
                     {([
                       { key: 'persona', label: 'Travel Style' },
-                      { key: 'history', label: 'Places Visited' },
                       { key: 'map', label: 'Map' },
+                      { key: 'history', label: 'Places Visited' },
                       { key: 'itineraries', label: `My Bucket List (${(dossier.recommendations || []).length})` },
                       ...(DEBUG_MODE ? [{ key: 'agentSwarm', label: 'Agent Trace' }, { key: 'architecture', label: 'Tech Specs' }] : [])
                     ] as { key: typeof activeTab; label: string }[]).map((tab) => (
@@ -689,6 +741,15 @@ function MainApp() {
                         <p className="text-stone-500 text-sm">Analyzing travel style — this will appear once the AI finishes reading the profile...</p>
                       </div>
                     )}
+                </div>
+
+                {/* INTERACTIVE TRAVEL MAP */}
+                <div ref={el => { sectionRefs.current['map'] = el; }} data-section="map" className="h-[500px]" id="tab-map">
+                  <WorldMap
+                    locations={allMapPins}
+                    activeLocation={activeLocation}
+                    onSelectLocation={(loc) => setActiveLocation(loc)}
+                  />
                 </div>
 
                 {/* TRAVEL STATS: Countries, Themes, Highlights */}
@@ -810,15 +871,6 @@ function MainApp() {
                         <span className="flex-1 h-px bg-stone-200" />
                       </button>
                     )}
-                </div>
-
-                {/* TAB CONTENT 3: INTERACTIVE TRAVEL MAP */}
-                <div ref={el => { sectionRefs.current['map'] = el; }} data-section="map" className="flex-1 min-h-[400px]" id="tab-map">
-                  <WorldMap
-                    locations={allMapPins}
-                    activeLocation={activeLocation}
-                    onSelectLocation={(loc) => setActiveLocation(loc)}
-                  />
                 </div>
 
                 {/* TAB CONTENT 4: GENERATED ITINERARIES */}
