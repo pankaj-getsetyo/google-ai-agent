@@ -403,18 +403,26 @@ class TaskAgent extends BaseAgent {
   }
   async *runAsyncImpl(context: InvocationContext): AsyncGenerator<any> {
     const state = context.session.state as Record<string, any>;
+    const username = state.username;
+    const job = activeJobs.get(username);
     const logFn = (msg: string) => {
-      if (!state._logs) state._logs = [];
-      state._logs.push({
+      const log: AgentLog = {
         id: `${this.name}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         agentName: this.name as AgentLog['agentName'],
         status: 'completed',
         message: msg,
         timestamp: new Date().toISOString(),
-      });
+      };
+      if (job) job.logs.push(log);
+      if (!state._logs) state._logs = [];
+      state._logs.push(log);
     };
     const result = await this.taskFn(state, logFn);
     Object.assign(state, result);
+    if (job) {
+      job.currentAgentIndex = state._agentIndex || 0;
+      job.dossier = buildPartialDossier(state);
+    }
 
     const stateDelta: Record<string, any> = {};
     for (const key of Object.keys(state)) {
@@ -634,7 +642,8 @@ const detectionAgent = new TaskAgent({
       throw new Error("Could not create itinerary briefs — not enough information to generate personalized trips.");
     }
 
-    log(`Identified ${visitedDestinations.length} destinations this creator has visited.`);
+    log(`Identified ${visitedDestinations.length} destinations across ${[...new Set(visitedDestinations.map(v => v.country))].length} countries.`);
+    log(`Generated ${recommendations.length} destination recommendations.`);
 
     const countriesVisited: string[] = parsed.countriesVisited || [...new Set(visitedDestinations.map(v => v.country))];
     const travelThemes: string[] = parsed.travelThemes || [];
@@ -673,8 +682,9 @@ const recommendationAgent = new TaskAgent({
   description: 'Validates and formats destination recommendations',
   taskFn: async (state, log) => {
     state._agentIndex = 5;
-    log(`Finding the perfect destinations for this creator...`);
-    log(`5 personalized recommendations selected.`);
+    const recs: TravelRecommendation[] = state.ai_recommendations;
+    log(`Matching ${recs.length} destinations to this creator's style...`);
+    recs.forEach(r => log(`${r.category.replace(' Destination', '')}: ${r.destination}, ${r.country}`));
     return {};
   }
 });
@@ -705,7 +715,8 @@ const itineraryAgent = new TaskAgent({
 
     const shouldGenerate = state._generateItinerary !== undefined ? state._generateItinerary : GENERATE_ITINERARY;
     if (!shouldGenerate) {
-      log(`${recommendations.length} destinations ready. You can generate itineraries individually.`);
+      log(`${recommendations.length} destinations ready for itinerary generation.`);
+      recommendations.forEach(r => log(`${r.destination} — ready to explore.`));
       const itineraries: GetSetYoItinerary[] = recommendations.map(r => ({
         destination: r.destination,
         packageDealId: 0,
@@ -788,7 +799,7 @@ const mapAgent = new TaskAgent({
   description: 'Places all destinations on an interactive map',
   taskFn: async (state, log) => {
     state._agentIndex = 8;
-    log(`Plotting destinations on the map...`);
+    log(`Plotting visited and recommended destinations on the map...`);
 
     const visitedDestinations: VisitedDestination[] = state.visited_destinations;
     const recommendations: TravelRecommendation[] = state.ai_recommendations;
@@ -824,7 +835,7 @@ const mapAgent = new TaskAgent({
       })
     };
 
-    log(`${mapData.visitedLocations.length + mapData.recommendedLocations.length} destinations pinned on the map.`);
+    log(`Pinned ${mapData.visitedLocations.length} visited and ${mapData.recommendedLocations.length} recommended locations.`);
     return { map_data: mapData };
   }
 });
@@ -835,7 +846,8 @@ const aggregatorAgent = new TaskAgent({
   description: 'Assembles the final travel profile and caches results',
   taskFn: async (state, log) => {
     state._agentIndex = 9;
-    log(`Finalizing your travel profile...`);
+    log(`Compiling your complete travel profile...`);
+    log(`Saving results for instant access...`);
 
     const profile: InstagramProfile = state.instagram_profile;
     const posts: InstagramPost[] = state.instagram_posts;
@@ -942,25 +954,12 @@ async function runAgentWorker(username: string, shouldGenerateItinerary: boolean
       sessionService: adkSessionService,
     });
 
-    for await (const event of runner.runAsync({
+    for await (const _event of runner.runAsync({
       userId: username,
       sessionId,
       newMessage: { role: 'user', parts: [{ text: `Analyze travel profile for @${username}` }] }
     })) {
-      const currentSession = await adkSessionService.getSession({ appName: 'creator-travel-intel', userId: username, sessionId });
-      if (currentSession) {
-        const state = currentSession.state as Record<string, any>;
-        job.logs = state._logs || [];
-        job.currentAgentIndex = state._agentIndex || 0;
-        job.dossier = state.final_dossier || buildPartialDossier(state);
-      }
-    }
-
-    const finalSession = await adkSessionService.getSession({ appName: 'creator-travel-intel', userId: username, sessionId });
-    if (finalSession) {
-      const state = finalSession.state as Record<string, any>;
-      job.logs = state._logs || [];
-      job.dossier = state.final_dossier || buildPartialDossier(state);
+      // Agents sync to job directly via activeJobs reference
     }
 
     job.status = job.dossier ? 'completed' : 'failed';
