@@ -460,13 +460,6 @@ function MainApp() {
     setDossier(null);
     setActiveTab('persona');
 
-    setTimeout(() => {
-      const el = document.getElementById('trigger-section');
-      if (el) {
-        const top = el.getBoundingClientRect().top + window.scrollY;
-        window.scrollTo({ top, behavior: 'smooth' });
-      }
-    }, 100);
 
     try {
       const res = await fetch("/api/analyze", {
