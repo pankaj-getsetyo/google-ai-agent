@@ -33,6 +33,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+
 ::selection {
   background: rgba(74, 58, 255, 0.15);
   color: #1a1a2e;

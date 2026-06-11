@@ -113,7 +113,9 @@ function SharedProfile() {
     <div className="min-h-screen bg-canvas text-stone-700 font-sans">
       <header className="border-b border-stone-200 bg-white">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <a href="/" className="font-display text-lg font-medium text-stone-900">GetSetYo</a>
+          <a href="/" className="flex items-center gap-3">
+            <img src="/assets/getsetyo-logo.webp" alt="GetSetYo" className="h-7" />
+          </a>
           <span className="text-xs text-stone-400">Travel Profile</span>
         </div>
       </header>
@@ -510,7 +512,7 @@ function MainApp() {
   }, [dossier]);
 
   return (
-    <div className="min-h-screen bg-canvas text-stone-700 font-sans flex flex-col relative selection:bg-brand-400/15" id="app-root">
+    <div className={`bg-canvas text-stone-700 font-sans flex flex-col relative selection:bg-brand-400/15 ${status === 'idle' ? 'h-screen overflow-hidden' : 'min-h-screen'}`} id="app-root">
 
       {/* Header */}
       <header className="border-b border-stone-200 bg-white/90 backdrop-blur-xl sticky top-0 z-50 px-5 md:px-10 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -540,12 +542,24 @@ function MainApp() {
         </div>
       </header>
 
-      <main className={`flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6 ${status === 'idle' ? 'justify-center min-h-[calc(100vh-80px)]' : ''}`} id="dashboard-layout">
+      {/* Background travel icons */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+        <Plane className="absolute top-[12%] left-[4%] w-32 h-32 rotate-12 text-brand-300 opacity-[0.07]" strokeWidth={0.75} />
+        <Globe className="absolute top-[20%] right-[6%] w-28 h-28 text-brand-300 opacity-[0.06]" strokeWidth={0.75} />
+        <MapPin className="absolute bottom-[25%] left-[6%] w-24 h-24 -rotate-12 text-brand-300 opacity-[0.06]" strokeWidth={0.75} />
+        <Compass className="absolute bottom-[15%] right-[4%] w-36 h-36 rotate-45 text-brand-300 opacity-[0.05]" strokeWidth={0.75} />
+        <Map className="absolute top-[55%] left-[2%] w-28 h-28 rotate-6 text-brand-300 opacity-[0.06]" strokeWidth={0.75} />
+        <Briefcase className="absolute top-[8%] right-[2%] w-24 h-24 -rotate-6 text-brand-300 opacity-[0.06]" strokeWidth={0.75} />
+        <Plane className="absolute bottom-[8%] left-[40%] w-20 h-20 -rotate-45 text-brand-300 opacity-[0.05]" strokeWidth={0.75} />
+        <Globe className="absolute top-[45%] right-[2%] w-20 h-20 text-brand-300 opacity-[0.05]" strokeWidth={0.75} />
+      </div>
+
+      <main className={`flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-8 relative z-10 ${status === 'idle' ? 'justify-center' : ''}`} id="dashboard-layout">
 
         {/* Hero + input */}
-        <section className={`flex flex-col items-center text-center gap-7 ${status === 'idle' ? 'py-0' : 'pt-8 pb-4 md:pt-14 md:pb-8'}`} id="trigger-section">
-          <div className="max-w-2xl flex flex-col items-center gap-3">
-            <h2 className="font-display text-3xl md:text-4xl font-light text-stone-900 leading-[1.15]">
+        <section className="flex flex-col items-center text-center gap-3 pt-3 pb-1" id="trigger-section">
+          <div className="max-w-2xl flex flex-col items-center gap-1.5">
+            <h2 className="font-display text-3xl md:text-4xl font-light text-stone-900 leading-[1.1]">
               Turn your Instagram into your<br /><span className="italic text-brand-500">travel profile</span> & bucket list
             </h2>
             <p className="text-sm text-stone-500">
